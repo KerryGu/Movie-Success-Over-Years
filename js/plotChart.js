@@ -90,6 +90,14 @@ class plotChart {
         vis.originalYDomain = null;
         vis.currentTransform = d3.zoomIdentity;
 
+        // Initialize zoom behavior
+        vis.zoom = d3.zoom()
+            .scaleExtent([0.5, 10]) // Min 50% zoom out, max 1000% zoom in
+            .translateExtent([[-vis.width * 0.5, -vis.height * 0.5], [vis.width * 1.5, vis.height * 1.5]]) // Limit panning
+            .on("zoom", function(event) {
+                vis.zoomed(event);
+            });
+
         // Get the actual dimensions of the container
         let container = document.getElementById("main-chart");
         let containerWidth = container ? container.getBoundingClientRect().width : 1400;
@@ -99,12 +107,38 @@ class plotChart {
         vis.width = containerWidth - vis.margin.left - vis.margin.right;
         vis.height = Math.max(containerHeight - vis.margin.top - vis.margin.bottom, 300);
 
-        // Create main SVG
-        vis.svg = d3.select("#main-chart")
+        // Create main SVG with zoom area
+        vis.svgContainer = d3.select("#main-chart")
             .attr("width", vis.width + vis.margin.left + vis.margin.right)
-            .attr("height", vis.height + vis.margin.top + vis.margin.bottom)
-            .append("g")
+            .attr("height", vis.height + vis.margin.top + vis.margin.bottom);
+
+        vis.svg = vis.svgContainer.append("g")
             .attr("transform", `translate(${vis.margin.left}, ${vis.margin.top})`);
+
+        // Add clip path to prevent dots from showing outside chart area
+        vis.svg.append("defs").append("clipPath")
+            .attr("id", "chart-clip")
+            .append("rect")
+            .attr("width", vis.width)
+            .attr("height", vis.height);
+
+        // Create a zoom area that covers the chart
+        vis.zoomArea = vis.svg.append("rect")
+            .attr("class", "zoom-area")
+            .attr("width", vis.width)
+            .attr("height", vis.height)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .call(vis.zoom);
+
+        // Double-click to reset zoom
+        vis.zoomArea.on("dblclick.zoom", function() {
+            vis.resetZoom();
+        });
+
+        // Create group for chart content that will be clipped
+        vis.chartArea = vis.svg.append("g")
+            .attr("clip-path", "url(#chart-clip)");
 
         // Scales
         vis.xScale = d3.scaleLinear()
@@ -252,6 +286,38 @@ class plotChart {
             .on("mouseout", function() {
                 d3.select(this).style("fill", "#888");
             });
+
+        // Add reset zoom button
+        const resetZoomGroup = legend.append("g")
+            .attr("class", "reset-zoom-btn")
+            .attr("transform", `translate(0, ${legendSpacing * 2 + 30})`)
+            .style("cursor", "pointer")
+            .attr("tabindex", "0")
+            .attr("role", "button")
+            .attr("aria-label", "Reset zoom and pan")
+            .on("click", function() {
+                vis.resetZoom();
+            })
+            .on("keypress", function(event) {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    vis.resetZoom();
+                }
+            });
+
+        resetZoomGroup.append("text")
+            .attr("x", 0)
+            .attr("y", 4)
+            .text("⟲ Reset view")
+            .style("fill", "#888")
+            .style("font-size", "11px")
+            .style("font-weight", "500")
+            .on("mouseover", function() {
+                d3.select(this).style("fill", "#e50914");
+            })
+            .on("mouseout", function() {
+                d3.select(this).style("fill", "#888");
+            });
     }
 
 
@@ -263,6 +329,91 @@ class plotChart {
         let vis = this;
         vis.yearRange = yearRange;
         vis.wrangleData();
+    }
+
+    // Zoom event handler
+    zoomed(event) {
+        let vis = this;
+        vis.currentTransform = event.transform;
+
+        // Create new scales based on zoom transform
+        const newXScale = event.transform.rescaleX(vis.xScale);
+        const newYScale = event.transform.rescaleY(vis.yScale);
+
+        // Update axes with new scales
+        vis.xAxisGroup.call(vis.xAxis.scale(newXScale));
+        vis.yAxisGroup.call(vis.yAxis.scale(newYScale));
+
+        // Update dots positions with new scales
+        vis.chartArea.selectAll(".dot")
+            .attr("cx", d => newXScale(d.Released_Year))
+            .attr("cy", d => newYScale(d.Gross));
+
+        // Update annotations if they exist
+        vis.updateAnnotationsWithZoom(newXScale, newYScale);
+    }
+
+    // Reset zoom to original view
+    resetZoom() {
+        let vis = this;
+        vis.zoomArea.transition()
+            .duration(750)
+            .call(vis.zoom.transform, d3.zoomIdentity);
+    }
+
+    // Update annotations during zoom
+    updateAnnotationsWithZoom(xScale, yScale) {
+        let vis = this;
+
+        // Re-position annotation lines and labels based on new scales
+        vis.svg.selectAll(".annotation-line")
+            .each(function(d) {
+                if (d) {
+                    const x = xScale(d.Released_Year);
+                    const y = yScale(d.Gross);
+                    d3.select(this)
+                        .attr("x1", x)
+                        .attr("x2", x)
+                        .attr("y1", d.annotateAbove ? y - 8 : y + 8)
+                        .attr("y2", d.annotateAbove ? y - 50 : y + 50);
+                }
+            });
+
+        vis.svg.selectAll(".annotation-label")
+            .each(function(d) {
+                if (d) {
+                    const x = xScale(d.Released_Year);
+                    const y = yScale(d.Gross);
+
+                    // Calculate label position based on original text anchor logic
+                    let labelX = x;
+                    if (d.textAnchor) {
+                        if (d.textAnchor === "start") {
+                            labelX = 5;
+                        } else if (d.textAnchor === "end") {
+                            labelX = vis.width - 5;
+                        }
+                    }
+
+                    d3.select(this)
+                        .attr("x", labelX)
+                        .attr("y", d.annotateAbove ? y - 55 : y + 65);
+                }
+            });
+
+        // Update annotation backgrounds
+        vis.svg.selectAll(".annotation-group rect")
+            .each(function() {
+                const label = d3.select(this.parentNode).select(".annotation-label");
+                if (!label.empty() && label.node()) {
+                    const labelBBox = label.node().getBBox();
+                    d3.select(this)
+                        .attr("x", labelBBox.x - 3)
+                        .attr("y", labelBBox.y - 1)
+                        .attr("width", labelBBox.width + 6)
+                        .attr("height", labelBBox.height + 2);
+                }
+            });
     }
 
     // Method to toggle rating band visibility
@@ -434,7 +585,7 @@ class plotChart {
         let vis = this;
 
         if (vis.displayData.length === 0) {
-            vis.svg.selectAll(".dot").remove();
+            vis.chartArea.selectAll(".dot").remove();
             vis.svg.selectAll(".annotation-group").remove(); // Clear annotations when no data
             return;
         }
@@ -463,8 +614,8 @@ class plotChart {
         vis.xAxisGroup.call(vis.xAxis);
         vis.yAxisGroup.call(vis.yAxis);
 
-        // Bind data to circles
-        let circles = vis.svg.selectAll(".dot")
+        // Bind data to circles (use chartArea for clipping)
+        let circles = vis.chartArea.selectAll(".dot")
             .data(vis.displayData, d => d.Series_Title);
 
         // Exit - interrupt any ongoing transitions and fade out
@@ -486,7 +637,18 @@ class plotChart {
             .attr("opacity", 0);
 
         // Merge and update - interrupt ongoing transitions before updating
-        enterCircles.merge(circles)
+        const mergedCircles = enterCircles.merge(circles);
+
+        // Apply current zoom transform if it exists
+        if (vis.currentTransform && vis.currentTransform.k !== 1) {
+            const newXScale = vis.currentTransform.rescaleX(vis.xScale);
+            const newYScale = vis.currentTransform.rescaleY(vis.yScale);
+            mergedCircles
+                .attr("cx", d => newXScale(d.Released_Year))
+                .attr("cy", d => newYScale(d.Gross));
+        }
+
+        mergedCircles
             .on("mouseover", function (event, d) {
                 // Build tooltip content with enhanced metadata
                 let tooltipContent = `
@@ -572,8 +734,20 @@ class plotChart {
             .interrupt() // Stop any ongoing transitions
             .transition("update")
             .duration(300)
-            .attr("cx", d => vis.xScale(d.Released_Year))
-            .attr("cy", d => vis.yScale(d.Gross))
+            .attr("cx", d => {
+                if (vis.currentTransform && vis.currentTransform.k !== 1) {
+                    const newXScale = vis.currentTransform.rescaleX(vis.xScale);
+                    return newXScale(d.Released_Year);
+                }
+                return vis.xScale(d.Released_Year);
+            })
+            .attr("cy", d => {
+                if (vis.currentTransform && vis.currentTransform.k !== 1) {
+                    const newYScale = vis.currentTransform.rescaleY(vis.yScale);
+                    return newYScale(d.Gross);
+                }
+                return vis.yScale(d.Gross);
+            })
             .attr("r", 5)
             .attr("fill", d => vis.colorScale(d.IMDB_Rating))
             .attr("opacity", 0.8);
@@ -670,9 +844,10 @@ class plotChart {
                 labelX = vis.width - 5;
             }
 
-            // Add connector line
+            // Add connector line with data for zoom updates
             annotationGroup.append("line")
                 .attr("class", "annotation-line")
+                .datum({Released_Year: highestGrossing.Released_Year, Gross: highestGrossing.Gross, annotateAbove: annotateAbove})
                 .attr("x1", x)
                 .attr("y1", lineY1)
                 .attr("x2", x)
@@ -685,9 +860,10 @@ class plotChart {
                 .delay(400)
                 .style("opacity", 0.9);
 
-            // Add label
+            // Add label with data for zoom updates
             annotationGroup.append("text")
                 .attr("class", "annotation-label")
+                .datum({Released_Year: highestGrossing.Released_Year, Gross: highestGrossing.Gross, annotateAbove: annotateAbove, textAnchor: textAnchor})
                 .attr("x", labelX)
                 .attr("y", labelY)
                 .style("text-anchor", textAnchor)
@@ -794,9 +970,10 @@ class plotChart {
                     labelX = vis.width - 5;
                 }
 
-                // Add connector line
+                // Add connector line with data for zoom updates
                 annotationGroup.append("line")
                     .attr("class", "annotation-line")
+                    .datum({Released_Year: highestRated.Released_Year, Gross: highestRated.Gross, annotateAbove: annotateAbove})
                     .attr("x1", x)
                     .attr("y1", lineY1)
                     .attr("x2", x)
@@ -809,9 +986,10 @@ class plotChart {
                     .delay(600)
                     .style("opacity", 0.9);
 
-                // Add label
+                // Add label with data for zoom updates
                 annotationGroup.append("text")
                     .attr("class", "annotation-label annotation-label-2")
+                    .datum({Released_Year: highestRated.Released_Year, Gross: highestRated.Gross, annotateAbove: annotateAbove, textAnchor: textAnchor})
                     .attr("x", labelX)
                     .attr("y", labelY)
                     .style("text-anchor", textAnchor)
