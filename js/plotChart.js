@@ -90,13 +90,8 @@ class plotChart {
         vis.originalYDomain = null;
         vis.currentTransform = d3.zoomIdentity;
 
-        // Initialize zoom behavior
-        vis.zoom = d3.zoom()
-            .scaleExtent([0.5, 10]) // Min 50% zoom out, max 1000% zoom in
-            .translateExtent([[-vis.width * 0.5, -vis.height * 0.5], [vis.width * 1.5, vis.height * 1.5]]) // Limit panning
-            .on("zoom", function(event) {
-                vis.zoomed(event);
-            });
+        // Initialize zoom behavior (will be configured after dimensions are set)
+        vis.zoom = null;
 
         // Get the actual dimensions of the container
         let container = document.getElementById("main-chart");
@@ -121,24 +116,6 @@ class plotChart {
             .append("rect")
             .attr("width", vis.width)
             .attr("height", vis.height);
-
-        // Create a zoom area that covers the chart
-        vis.zoomArea = vis.svg.append("rect")
-            .attr("class", "zoom-area")
-            .attr("width", vis.width)
-            .attr("height", vis.height)
-            .style("fill", "none")
-            .style("pointer-events", "all")
-            .call(vis.zoom);
-
-        // Double-click to reset zoom
-        vis.zoomArea.on("dblclick.zoom", function() {
-            vis.resetZoom();
-        });
-
-        // Create group for chart content that will be clipped
-        vis.chartArea = vis.svg.append("g")
-            .attr("clip-path", "url(#chart-clip)");
 
         // Scales
         vis.xScale = d3.scaleLinear()
@@ -166,6 +143,10 @@ class plotChart {
 
         vis.yAxisGroup = vis.svg.append("g")
             .attr("class", "axis y-axis");
+
+        // Create group for chart content that will be clipped (after axes so dots appear on top)
+        vis.chartArea = vis.svg.append("g")
+            .attr("clip-path", "url(#chart-clip)");
 
         // Axis labels
         vis.svg.append("text")
@@ -318,6 +299,38 @@ class plotChart {
             .on("mouseout", function() {
                 d3.select(this).style("fill", "#888");
             });
+
+        // Initialize zoom behavior now that dimensions are set
+        vis.zoom = d3.zoom()
+            .scaleExtent([0.8, 5]) // More conservative zoom range
+            .translateExtent([[0, 0], [vis.width, vis.height]]) // Keep within chart bounds
+            .extent([[0, 0], [vis.width, vis.height]])
+            .filter(function(event) {
+                // Allow zoom only with:
+                // - Ctrl/Cmd + scroll (standard zoom gesture)
+                // - Mouse drag (pan)
+                // - Touch events
+                // This prevents accidental zoom on normal scrolling
+                return event.ctrlKey || event.metaKey || event.type === 'mousedown' || event.type.startsWith('touch');
+            })
+            .on("zoom", function(event) {
+                vis.zoomed(event);
+            });
+
+        // Create a zoom area that covers the chart (add last so it's on top)
+        vis.zoomArea = vis.svg.append("rect")
+            .attr("class", "zoom-area")
+            .attr("width", vis.width)
+            .attr("height", vis.height)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .style("cursor", "move")
+            .call(vis.zoom);
+
+        // Double-click to reset zoom
+        vis.zoomArea.on("dblclick.zoom", function() {
+            vis.resetZoom();
+        });
     }
 
 
