@@ -805,8 +805,17 @@ class plotChart {
 
         // Add annotation for highest grossing movie
         if (highestGrossing) {
-            let x = vis.xScale(highestGrossing.Released_Year);
-            let y = vis.yScale(highestGrossing.Gross);
+            // Apply current zoom transform if it exists
+            let xScale = vis.xScale;
+            let yScale = vis.yScale;
+
+            if (vis.currentTransform && vis.currentTransform.k !== 1) {
+                xScale = vis.currentTransform.rescaleX(vis.xScale);
+                yScale = vis.currentTransform.rescaleY(vis.yScale);
+            }
+
+            let x = xScale(highestGrossing.Released_Year);
+            let y = yScale(highestGrossing.Gross);
 
             // Determine if annotation should go above or below based on position
             let spaceAbove = y;
@@ -931,12 +940,21 @@ class plotChart {
         if (highestRated) {
             // Only show if different from highest grossing
             if (highestRated.Series_Title !== highestGrossing.Series_Title) {
-                let x = vis.xScale(highestRated.Released_Year);
-                let y = vis.yScale(highestRated.Gross);
+                // Apply current zoom transform if it exists
+                let xScale = vis.xScale;
+                let yScale = vis.yScale;
+
+                if (vis.currentTransform && vis.currentTransform.k !== 1) {
+                    xScale = vis.currentTransform.rescaleX(vis.xScale);
+                    yScale = vis.currentTransform.rescaleY(vis.yScale);
+                }
+
+                let x = xScale(highestRated.Released_Year);
+                let y = yScale(highestRated.Gross);
 
                 // Store first annotation position for collision detection
-                let firstAnnotationX = vis.xScale(highestGrossing.Released_Year);
-                let firstAnnotationY = vis.yScale(highestGrossing.Gross);
+                let firstAnnotationX = xScale(highestGrossing.Released_Year);
+                let firstAnnotationY = yScale(highestGrossing.Gross);
                 let firstAnnotateAbove = firstAnnotationY > 100;
 
                 // Determine if annotation should go above or below based on position
