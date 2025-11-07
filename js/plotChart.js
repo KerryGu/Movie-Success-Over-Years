@@ -299,6 +299,7 @@ class plotChart {
 
         if (vis.displayData.length === 0) {
             vis.svg.selectAll(".dot").remove();
+            vis.svg.selectAll(".annotation-group").remove(); // Clear annotations when no data
             return;
         }
 
