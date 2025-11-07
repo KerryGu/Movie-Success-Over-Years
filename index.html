@@ -25,7 +25,7 @@
 
         <!-- Instructions -->
         <div class="instructions">
-            <p><strong>How to explore:</strong> Select genres from dropdown • Click legend items to toggle ratings • Cmd+scroll to zoom & drag to pan plot • Drag on timeline to filter years • Hover over dots for movie details</p>
+            <p><strong>How to explore:</strong> Select genres from dropdown • Click legend items to toggle ratings • Click 'Enable Zoom/Pan' to zoom & pan • Drag on timeline to filter years • Hover over dots for movie details</p>
         </div>
 
         <!-- Integrated Filter & Stats Bar -->
@@ -59,12 +59,10 @@
                         <span class="stat-label">Movies:</span>
                         <span id="movie-count" class="stat-value">0</span>
                     </div>
-                    <div class="stat-divider"></div>
                     <div class="stat-item">
                         <span class="stat-label">Avg Revenue:</span>
                         <span id="avg-gross" class="stat-value">$0M</span>
                     </div>
-                    <div class="stat-divider"></div>
                     <div class="stat-item">
                         <span class="stat-label">Year Range:</span>
                         <span id="year-range" class="stat-value">-</span>
@@ -72,6 +70,9 @@
                 </div>
 
                 <div class="filter-actions">
+                    <button id="toggle-zoom-mode" class="btn btn-outline-primary btn-sm">
+                        <span>🔍</span> Enable Zoom/Pan
+                    </button>
                     <button id="reset-timeline" class="btn btn-outline-secondary btn-sm">
                         <span>⟲</span> Reset Timeline
                     </button>

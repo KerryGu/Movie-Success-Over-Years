@@ -303,17 +303,11 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 3px 16px;
+    padding: 8px 16px;
     background: linear-gradient(135deg, rgba(26, 26, 26, 0.95) 0%, rgba(20, 20, 20, 0.85) 100%);;
     border-radius: 6px;
     border: 1px solid rgba(68, 68, 68, 0.3);
     flex-shrink: 0;
-  }
-
-  .stat-divider {
-    width: 2px;
-    height: 30px;
-    background: linear-gradient(180deg, transparent, rgba(229, 9, 20, 0.478), transparent);
   }
 
   .stat-item {

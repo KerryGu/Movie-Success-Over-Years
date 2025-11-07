@@ -48,6 +48,11 @@ function loadData() {
             myChart.updateYearRange(yearRange);
         });
 
+        // Setup zoom mode toggle button
+        d3.select("#toggle-zoom-mode").on("click", function() {
+            myChart.toggleZoomMode();
+        });
+
         // Setup reset all filters button
         d3.select("#reset-filters").on("click", function() {
             // Reset genre selection to all
@@ -66,8 +71,12 @@ function loadData() {
             // Reset legend filters too
             myChart.resetLegend();
 
-            // Reset zoom to default view
-            myChart.resetZoom();
+            // Reset zoom to default view (and exit zoom mode if active)
+            if (myChart.zoomModeEnabled) {
+                myChart.toggleZoomMode();
+            } else {
+                myChart.resetZoom();
+            }
         });
 
         // Setup reset timeline button (new)

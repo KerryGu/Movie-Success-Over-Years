@@ -7,6 +7,7 @@ class plotChart {
         this.yearRange = null;
         this.isInitialized = false; // Track if charts have been initialized
         this.visibleRatingBands = new Set(['high', 'low']); // Track visible rating bands
+        this.zoomModeEnabled = false; // Start with zoom mode disabled for tooltips to work
 
         this.initVis();
     }
@@ -198,13 +199,15 @@ class plotChart {
             .attr("width", vis.width)
             .attr("height", vis.height)
             .style("fill", "none")
-            .style("pointer-events", "all")
+            .style("pointer-events", "none")  // Start with zoom disabled so tooltips work
             .style("cursor", "move")
             .call(vis.zoom);
 
-        // Double-click to reset zoom
+        // Double-click to reset zoom (only works when zoom mode is enabled)
         vis.zoomArea.on("dblclick.zoom", function() {
-            vis.resetZoom();
+            if (vis.zoomModeEnabled) {
+                vis.resetZoom();
+            }
         });
 
         // ===== Add Interactive Color Legend (AFTER zoom area so it's on top) =====
@@ -305,11 +308,12 @@ class plotChart {
                 d3.select(this).style("fill", "#888");
             });
 
-        // Add reset zoom button
+        // Add reset zoom button (initially hidden)
         const resetZoomGroup = legend.append("g")
             .attr("class", "reset-zoom-btn")
             .attr("transform", `translate(0, ${legendSpacing * 2 + 30})`)
             .style("cursor", "pointer")
+            .style("display", "none")  // Hidden by default
             .attr("tabindex", "0")
             .attr("role", "button")
             .attr("aria-label", "Reset zoom and pan")
@@ -342,6 +346,58 @@ class plotChart {
 
 
 
+    // Method to toggle zoom/pan mode
+    toggleZoomMode() {
+        let vis = this;
+        vis.zoomModeEnabled = !vis.zoomModeEnabled;
+
+        // Update button text and style
+        const button = d3.select("#toggle-zoom-mode");
+        if (vis.zoomModeEnabled) {
+            button.text("🖱️ Exit Zoom/Pan")
+                  .classed("btn-outline-primary", false)
+                  .classed("btn-primary", true);
+
+            // Enable zoom area
+            vis.zoomArea.style("pointer-events", "all");
+
+            // Show reset view button only if we're actually zoomed
+            const isActuallyZoomed = vis.currentTransform && (
+                vis.currentTransform.k !== 1 ||
+                vis.currentTransform.x !== 0 ||
+                vis.currentTransform.y !== 0
+            );
+
+            if (isActuallyZoomed) {
+                vis.svg.select(".reset-zoom-btn").style("display", null);
+            } else {
+                vis.svg.select(".reset-zoom-btn").style("display", "none");
+            }
+
+            // Update instructions
+            d3.select(".instructions p").html("<strong>Zoom/Pan Mode Active:</strong> Drag to pan • Cmd+scroll to zoom • Double-click to reset • Click 'Exit Zoom/Pan' to return to exploration mode");
+
+            // Redraw annotations for zoom mode
+            vis.drawAnnotations();
+        } else {
+            button.text("🔍 Enable Zoom/Pan")
+                  .classed("btn-primary", false)
+                  .classed("btn-outline-primary", true);
+
+            // Disable zoom area to allow tooltips
+            vis.zoomArea.style("pointer-events", "none");
+
+            // In explore mode, never show the reset button
+            vis.svg.select(".reset-zoom-btn").style("display", "none");
+
+            // Update instructions back to default
+            d3.select(".instructions p").html("<strong>How to explore:</strong> Select genres from dropdown • Click legend items to toggle ratings • Click 'Enable Zoom/Pan' to zoom & pan • Drag on timeline to filter years • Hover over dots for movie details");
+
+            // Just redraw annotations without resetting the zoom
+            vis.drawAnnotations();
+        }
+    }
+
     // Method to handle year range updates from Timeline
     updateYearRange(yearRange) {
         let vis = this;
@@ -352,7 +408,18 @@ class plotChart {
     // Zoom event handler
     zoomed(event) {
         let vis = this;
+
+        // Only process zoom events when zoom mode is enabled
+        if (!vis.zoomModeEnabled) return;
+
         vis.currentTransform = event.transform;
+
+        // Show reset view button when zoomed (not at identity)
+        if (event.transform.k !== 1 || event.transform.x !== 0 || event.transform.y !== 0) {
+            vis.svg.select(".reset-zoom-btn").style("display", null);
+        } else {
+            vis.svg.select(".reset-zoom-btn").style("display", "none");
+        }
 
         // Create new scales based on zoom transform
         const newXScale = event.transform.rescaleX(vis.xScale);
@@ -367,21 +434,46 @@ class plotChart {
             .attr("cx", d => newXScale(d.Released_Year))
             .attr("cy", d => newYScale(d.Gross));
 
-        // Update annotations if they exist
+        // Update annotations with zoom
         vis.updateAnnotationsWithZoom(newXScale, newYScale);
     }
 
     // Reset zoom to original view
     resetZoom() {
         let vis = this;
+
+        // Only allow reset if we're in zoom mode OR if we're actually zoomed
+        const isActuallyZoomed = vis.currentTransform && (
+            vis.currentTransform.k !== 1 ||
+            vis.currentTransform.x !== 0 ||
+            vis.currentTransform.y !== 0
+        );
+
+        if (!vis.zoomModeEnabled && !isActuallyZoomed) {
+            // Don't do anything if we're in explore mode and not zoomed
+            return;
+        }
+
+        vis.currentTransform = d3.zoomIdentity;
         vis.zoomArea.transition()
             .duration(750)
-            .call(vis.zoom.transform, d3.zoomIdentity);
+            .call(vis.zoom.transform, d3.zoomIdentity)
+            .on("end", function() {
+                // After zoom reset completes, redraw annotations
+                vis.drawAnnotations();
+
+                // Always hide reset view button after reset completes
+                // (since we're now at identity transform)
+                vis.svg.select(".reset-zoom-btn").style("display", "none");
+            });
     }
 
     // Update annotations during zoom
     updateAnnotationsWithZoom(xScale, yScale) {
         let vis = this;
+
+        // Ensure annotation group exists and has correct opacity
+        vis.svg.selectAll(".annotation-group").style("opacity", 1);
 
         // Re-position annotation lines and labels based on new scales
         vis.svg.selectAll(".annotation-line")
@@ -431,14 +523,20 @@ class plotChart {
         // Update annotation backgrounds
         vis.svg.selectAll(".annotation-group rect")
             .each(function() {
-                const label = d3.select(this.parentNode).select(".annotation-label");
+                // Check for both annotation labels
+                let label = d3.select(this.parentNode).select(".annotation-label");
+                if (label.empty()) {
+                    label = d3.select(this.parentNode).select(".annotation-label-2");
+                }
+
                 if (!label.empty() && label.node()) {
                     const labelBBox = label.node().getBBox();
                     d3.select(this)
                         .attr("x", labelBBox.x - 3)
                         .attr("y", labelBBox.y - 1)
                         .attr("width", labelBBox.width + 6)
-                        .attr("height", labelBBox.height + 2);
+                        .attr("height", labelBBox.height + 2)
+                        .style("opacity", 0.85);  // Ensure consistent opacity
                 }
             });
     }
@@ -637,9 +735,20 @@ class plotChart {
             d3.max(vis.data, d => d.Gross) * 1.1
         ]);
 
-        // Update axes
-        vis.xAxisGroup.call(vis.xAxis);
-        vis.yAxisGroup.call(vis.yAxis);
+        // Update axes (apply zoom transform if exists)
+        if (vis.currentTransform && (
+            vis.currentTransform.k !== 1 ||
+            vis.currentTransform.x !== 0 ||
+            vis.currentTransform.y !== 0
+        )) {
+            const newXScale = vis.currentTransform.rescaleX(vis.xScale);
+            const newYScale = vis.currentTransform.rescaleY(vis.yScale);
+            vis.xAxisGroup.call(vis.xAxis.scale(newXScale));
+            vis.yAxisGroup.call(vis.yAxis.scale(newYScale));
+        } else {
+            vis.xAxisGroup.call(vis.xAxis);
+            vis.yAxisGroup.call(vis.yAxis);
+        }
 
         // Bind data to circles (use chartArea for clipping)
         let circles = vis.chartArea.selectAll(".dot")
@@ -661,15 +770,19 @@ class plotChart {
             .attr("cy", d => vis.yScale(d.Gross))
             .attr("r", 5)
             .attr("fill", d => vis.colorScale(d.IMDB_Rating))
-            .attr("stroke", "#000")  // Add black stroke for better visibility
-            .attr("stroke-width", 0.5)
+            .attr("stroke", "#ffffff")  // White stroke to match CSS
+            .attr("stroke-width", 1)
             .attr("opacity", 0);
 
         // Merge and update - interrupt ongoing transitions before updating
         const mergedCircles = enterCircles.merge(circles);
 
-        // Apply current zoom transform if it exists
-        if (vis.currentTransform && vis.currentTransform.k !== 1) {
+        // Apply current zoom transform if it exists (even when not in zoom mode)
+        if (vis.currentTransform && (
+            vis.currentTransform.k !== 1 ||
+            vis.currentTransform.x !== 0 ||
+            vis.currentTransform.y !== 0
+        )) {
             const newXScale = vis.currentTransform.rescaleX(vis.xScale);
             const newYScale = vis.currentTransform.rescaleY(vis.yScale);
             mergedCircles
@@ -750,29 +863,37 @@ class plotChart {
                     .style("stroke", "#e50914")
                     .style("stroke-width", "2px");
             })
-            .on("mouseout", function () {
+            .on("mouseout", function (event, d) {
                 d3.select("#tooltip").classed("visible", false);
 
                 d3.select(this)
                     .transition()
                     .duration(200)
                     .attr("r", 5)
-                    .attr("fill", d => vis.colorScale(d.IMDB_Rating))
-                    .attr("stroke", "#000")  // Reset to black stroke
-                    .attr("stroke-width", 0.5);
+                    .attr("fill", vis.colorScale(d.IMDB_Rating))
+                    .style("stroke", "#ffffff")  // Reset to white stroke to match CSS
+                    .style("stroke-width", "1px");
             })
             .interrupt() // Stop any ongoing transitions
             .transition("update")
             .duration(300)
             .attr("cx", d => {
-                if (vis.currentTransform && vis.currentTransform.k !== 1) {
+                if (vis.currentTransform && (
+                    vis.currentTransform.k !== 1 ||
+                    vis.currentTransform.x !== 0 ||
+                    vis.currentTransform.y !== 0
+                )) {
                     const newXScale = vis.currentTransform.rescaleX(vis.xScale);
                     return newXScale(d.Released_Year);
                 }
                 return vis.xScale(d.Released_Year);
             })
             .attr("cy", d => {
-                if (vis.currentTransform && vis.currentTransform.k !== 1) {
+                if (vis.currentTransform && (
+                    vis.currentTransform.k !== 1 ||
+                    vis.currentTransform.x !== 0 ||
+                    vis.currentTransform.y !== 0
+                )) {
                     const newYScale = vis.currentTransform.rescaleY(vis.yScale);
                     return newYScale(d.Gross);
                 }
@@ -789,14 +910,28 @@ class plotChart {
     drawAnnotations() {
         let vis = this;
 
-        // Remove old annotations
-        vis.svg.selectAll(".annotation-group").remove();
+        // Remove old annotations (including any lingering opacity styles)
+        vis.svg.selectAll(".annotation-group").interrupt().remove();
+
+        // Also remove any orphaned annotation elements
+        vis.svg.selectAll(".annotation-line").remove();
+        vis.svg.selectAll(".annotation-label").remove();
+        vis.svg.selectAll(".annotation-label-2").remove();
 
         if (vis.displayData.length === 0) return;
 
-        // Create annotation group
+        // Create annotation group with explicit opacity
         let annotationGroup = vis.svg.append("g")
-            .attr("class", "annotation-group");
+            .attr("class", "annotation-group")
+            .style("opacity", 1);  // Ensure group itself is fully opaque
+
+        // Check if we have a zoom transform applied
+        // If zoomed, we skip animations for cleaner rendering
+        const isZoomed = vis.currentTransform && (
+            vis.currentTransform.k !== 1 ||
+            vis.currentTransform.x !== 0 ||
+            vis.currentTransform.y !== 0
+        );
 
         // Find highest grossing movie
         let highestGrossing = vis.displayData.reduce((max, d) =>
@@ -805,11 +940,11 @@ class plotChart {
 
         // Add annotation for highest grossing movie
         if (highestGrossing) {
-            // Apply current zoom transform if it exists
+            // Apply current zoom transform if it exists (check for any transform, not just scale)
             let xScale = vis.xScale;
             let yScale = vis.yScale;
 
-            if (vis.currentTransform && vis.currentTransform.k !== 1) {
+            if (isZoomed) {
                 xScale = vis.currentTransform.rescaleX(vis.xScale);
                 yScale = vis.currentTransform.rescaleY(vis.yScale);
             }
@@ -884,7 +1019,8 @@ class plotChart {
             }
 
             // Add connector line with data for zoom updates
-            annotationGroup.append("line")
+            // Skip animation if we're zoomed in (annotations are being redrawn)
+            const lineElement = annotationGroup.append("line")
                 .attr("class", "annotation-line")
                 .datum({Released_Year: highestGrossing.Released_Year, Gross: highestGrossing.Gross, annotateAbove: annotateAbove})
                 .attr("x1", x)
@@ -893,14 +1029,21 @@ class plotChart {
                 .attr("y2", lineY2)
                 .style("stroke", "#e50914")
                 .style("stroke-width", 2)
-                .style("opacity", 0)
-                .transition()
-                .duration(500)
-                .delay(400)
-                .style("opacity", 0.9);
+                .style("fill", "none");  // No fill for lines
+
+            if (isZoomed) {
+                lineElement.style("opacity", 1);
+            } else {
+                lineElement
+                    .style("opacity", 0)
+                    .transition()
+                    .duration(500)
+                    .delay(400)
+                    .style("opacity", 1);
+            }
 
             // Add label with data for zoom updates
-            annotationGroup.append("text")
+            const labelElement = annotationGroup.append("text")
                 .attr("class", "annotation-label")
                 .datum({Released_Year: highestGrossing.Released_Year, Gross: highestGrossing.Gross, annotateAbove: annotateAbove, textAnchor: textAnchor})
                 .attr("x", labelX)
@@ -909,26 +1052,38 @@ class plotChart {
                 .style("fill", "#e50914")
                 .style("font-weight", "bold")
                 .style("font-size", "11px")
-                .style("opacity", 0)
-                .text(fullText)
-                .transition()
-                .duration(500)
-                .delay(400)
-                .style("opacity", 1);
+                .text(fullText);
+
+            if (isZoomed) {
+                labelElement.style("opacity", 1);
+            } else {
+                labelElement
+                    .style("opacity", 0)
+                    .transition()
+                    .duration(500)
+                    .delay(400)
+                    .style("opacity", 1);
+            }
 
             // Add subtle background for readability
             let labelBBox = annotationGroup.select(".annotation-label").node().getBBox();
-            annotationGroup.insert("rect", ".annotation-label")
+            const bgRect = annotationGroup.insert("rect", ".annotation-label")
                 .attr("x", labelBBox.x - 3)
                 .attr("y", labelBBox.y - 1)
                 .attr("width", labelBBox.width + 6)
                 .attr("height", labelBBox.height + 2)
-                .style("fill", "#111")
-                .style("opacity", 0)
-                .transition()
-                .duration(500)
-                .delay(400)
-                .style("opacity", 0.85);
+                .style("fill", "#111");
+
+            if (isZoomed) {
+                bgRect.style("opacity", 0.85);
+            } else {
+                bgRect
+                    .style("opacity", 0)
+                    .transition()
+                    .duration(500)
+                    .delay(400)
+                    .style("opacity", 0.85);
+            }
         }
 
         // Find highest rated movie (absolute highest, not just blockbusters)
@@ -944,7 +1099,7 @@ class plotChart {
                 let xScale = vis.xScale;
                 let yScale = vis.yScale;
 
-                if (vis.currentTransform && vis.currentTransform.k !== 1) {
+                if (isZoomed) {
                     xScale = vis.currentTransform.rescaleX(vis.xScale);
                     yScale = vis.currentTransform.rescaleY(vis.yScale);
                 }
@@ -1039,51 +1194,71 @@ class plotChart {
                 }
 
                 // Add connector line with data for zoom updates
-                annotationGroup.append("line")
+                // Use isZoomed from parent scope
+                const lineElement2 = annotationGroup.append("line")
                     .attr("class", "annotation-line")
                     .datum({Released_Year: highestRated.Released_Year, Gross: highestRated.Gross, annotateAbove: annotateAbove})
                     .attr("x1", x)
                     .attr("y1", lineY1)
                     .attr("x2", x)
                     .attr("y2", lineY2)
-                    .style("stroke", "#ff2919")
+                    .style("stroke", "#e50914")  // Use same color as highest grossing for consistency
                     .style("stroke-width", 2)
-                    .style("opacity", 0)
-                    .transition()
-                    .duration(500)
-                    .delay(600)
-                    .style("opacity", 0.9);
+                    .style("fill", "none");  // No fill for lines
+
+                if (isZoomed) {
+                    lineElement2.style("opacity", 1);
+                } else {
+                    lineElement2
+                        .style("opacity", 0)
+                        .transition()
+                        .duration(500)
+                        .delay(600)
+                        .style("opacity", 1);
+                }
 
                 // Add label with data for zoom updates
-                annotationGroup.append("text")
+                const labelElement2 = annotationGroup.append("text")
                     .attr("class", "annotation-label annotation-label-2")
                     .datum({Released_Year: highestRated.Released_Year, Gross: highestRated.Gross, annotateAbove: annotateAbove, textAnchor: textAnchor})
                     .attr("x", labelX)
                     .attr("y", labelY)
                     .style("text-anchor", textAnchor)
-                    .style("fill", "#ff2919")
+                    .style("fill", "#e50914")  // Use same color as highest grossing for consistency
                     .style("font-weight", "bold")
                     .style("font-size", "11px")
-                    .style("opacity", 0)
-                    .text(fullText)
-                    .transition()
-                    .duration(500)
-                    .delay(600)
-                    .style("opacity", 1);
+                    .text(fullText);
+
+                if (isZoomed) {
+                    labelElement2.style("opacity", 1);
+                } else {
+                    labelElement2
+                        .style("opacity", 0)
+                        .transition()
+                        .duration(500)
+                        .delay(600)
+                        .style("opacity", 1);
+                }
 
                 // Add background
                 let labelBBox = annotationGroup.select(".annotation-label-2").node().getBBox();
-                annotationGroup.insert("rect", ".annotation-label-2")
+                const bgRect2 = annotationGroup.insert("rect", ".annotation-label-2")
                     .attr("x", labelBBox.x - 3)
                     .attr("y", labelBBox.y - 1)
                     .attr("width", labelBBox.width + 6)
                     .attr("height", labelBBox.height + 2)
-                    .style("fill", "#111")
-                    .style("opacity", 0)
-                    .transition()
-                    .duration(500)
-                    .delay(600)
-                    .style("opacity", 0.85);
+                    .style("fill", "#111");
+
+                if (isZoomed) {
+                    bgRect2.style("opacity", 0.85);
+                } else {
+                    bgRect2
+                        .style("opacity", 0)
+                        .transition()
+                        .duration(500)
+                        .delay(600)
+                        .style("opacity", 0.85);
+                }
             }
         }
     }
