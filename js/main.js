@@ -35,9 +35,10 @@ function loadData() {
 
         console.log("Data loaded:", data.length, "movies with valid gross data");
 
-        // Hide loading indicator and show visualization
+        // Hide loading indicator and show visualization (chart + timeline)
         d3.select("#loading-indicator").style("display", "none");
         d3.select("#visualization-content").style("display", "flex");
+        d3.select(".visualization-continuation").style("display", "block");
 
         // Create main visualization
         myChart = new plotChart(null, data);
@@ -92,3 +93,15 @@ function loadData() {
         console.error("Error loading data:", error);
     })
 }
+
+// Hide scroll indicator when user starts scrolling
+window.addEventListener('scroll', function() {
+    const viewportContent = document.querySelector('.viewport-content');
+    if (viewportContent) {
+        if (window.scrollY > 0) {
+            viewportContent.style.setProperty('--scroll-indicator-opacity', '0');
+        } else {
+            viewportContent.style.setProperty('--scroll-indicator-opacity', '1');
+        }
+    }
+});

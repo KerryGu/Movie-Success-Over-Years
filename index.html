@@ -15,21 +15,23 @@
 
 
     <div class="container">
-         <!-- Header Section with just the title -->
-        <div class="header-section">
-            <div class="title-section">
-                <h1 class="title">Commercial Success Of IMDB Top 1000 Movies</h1>
-                <p class="subtitle">Exploring Revenue, Ratings, and Genre Trends Across Decades</p>
+        <!-- First viewport: Core visualization (header to timeline) -->
+        <div class="viewport-content">
+            <!-- Header Section with just the title -->
+            <div class="header-section">
+                <div class="title-section">
+                    <h1 class="title">Commercial Success Of IMDB Top 1000 Movies</h1>
+                    <p class="subtitle">Exploring Revenue, Ratings, and Genre Trends Across Decades</p>
+                </div>
             </div>
-        </div>
 
-        <!-- Instructions -->
-        <div class="instructions">
-            <p><strong>Tip:</strong> • Click legend items to toggle ratings • Cmd/Ctrl + scroll to zoom, drag to pan • Double-click to reset view • Drag on timeline below to filter years • Hover over dots for movie details</p>
-        </div>
+            <!-- Instructions -->
+            <div class="instructions">
+                <p><strong>Tip:</strong> • Click legend items to toggle ratings • Cmd/Ctrl + scroll to zoom, drag to pan • Double-click to reset view • Drag on timeline below to filter years • Hover over dots for movie details</p>
+            </div>
 
-        <!-- Integrated Filter & Stats Bar -->
-        <div class="filter-bar">
+            <!-- Integrated Filter & Stats Bar -->
+            <div class="filter-bar">
             <div class="filter-controls">
                 <div class="filter-group">
                     <label class="filter-label">Genre Filter:</label>
@@ -86,19 +88,23 @@
                     <p>Loading movie data...</p>
                 </div>
 
-                <!-- Main Visualization: visualization, slider chart -->
-                <div id="visualization-content" class="visualization-section" style="display: none;">
-                    <div class="main-chart-section">
-                        <svg id="main-chart"></svg>
-                    </div>
-
-                    <div class="slider-section">
-                        <svg id="slider-chart"></svg>
-                    </div>
+            <!-- Main Visualization: chart fills first viewport -->
+            <div id="visualization-content" class="visualization-section" style="display: none;">
+                <div class="main-chart-section">
+                    <svg id="main-chart"></svg>
                 </div>
+            </div>
+        </div> <!-- Close viewport-content -->
 
-                <!-- Featured Movies Section -->
-                <div id="featured-movies" class="featured-movies" style="display: none;">
+        <!-- Continuation of visualization (timeline starts on second viewport) -->
+        <div class="visualization-continuation" style="display: none;">
+            <div class="slider-section">
+                <svg id="slider-chart"></svg>
+            </div>
+        </div>
+
+        <!-- Featured Movies Section (second viewport, requires scroll) -->
+        <div id="featured-movies" class="featured-movies" style="display: none;">
                     <h3 class="featured-title">📊 Featured Movies in Current Selection</h3>
                     <div class="featured-grid">
                         <div class="featured-card">
@@ -121,9 +127,7 @@
                             <div id="hidden-gem-value" class="featured-value">-</div>
                         </div>
                     </div>
-                </div>
-            </div> <!-- Close main-content -->
-        </div> <!-- Close content-wrapper -->
+        </div> <!-- Close featured-movies -->
     </div> <!-- Close container -->
 
     <!-- Tooltip -->

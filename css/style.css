@@ -9,21 +9,54 @@
     font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
     background-color: #000;
     color: #fff;
-    min-height: 100vh;
-    padding: 10px;
     margin: 0;
-    display: flex;
-    flex-direction: column;
+    padding: 0;
+    overflow-x: hidden;
   }
-  
+
   .container {
     max-width: 100%;
     width: 100%;
     margin: 0 auto;
-    padding: 0 10px;
-    flex: 1;
+  }
+
+  /* First viewport: Core visualization (header to timeline fills 100vh) */
+  .viewport-content {
+    min-height: 100vh;
+    height: 100vh;
+    padding: 10px;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
+    position: relative;
+    --scroll-indicator-opacity: 1;
+  }
+
+  /* Subtle scroll indicator at bottom of first viewport */
+  .viewport-content::after {
+    content: "↓";
+    position: absolute;
+    bottom: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 20px;
+    animation: bounce 2s infinite;
+    pointer-events: none;
+    opacity: var(--scroll-indicator-opacity);
+    transition: opacity 0.3s ease;
+  }
+
+  @keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+      transform: translateX(-50%) translateY(0);
+    }
+    40% {
+      transform: translateX(-50%) translateY(-10px);
+    }
+    60% {
+      transform: translateX(-50%) translateY(-5px);
+    }
   }
   
   /* ===== Header Section ===== */
@@ -336,12 +369,12 @@
     background-clip: text;
   }
 
-  /* ===== Featured Movies ===== */
+  /* ===== Featured Movies (second viewport, below the fold) ===== */
   .featured-movies {
     background-color: #1a1a1a;
     border-radius: 8px;
     padding: 20px;
-    margin-top: 15px;
+    margin: 20px 10px;
   }
 
   .featured-title {
@@ -448,24 +481,38 @@
     margin: 0;
   }
 
-  /* ===== Visualization Section ===== */
+  /* ===== Visualization Section (main chart fills first viewport) ===== */
   .visualization-section {
     background-color: #111;
-    border-radius: 8px;
+    border-radius: 8px 8px 0 0;  /* Round top corners only */
     padding: 20px;
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
-  
+
+  .main-chart-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ===== Timeline Continuation (visual continuation of visualization box) ===== */
+  .visualization-continuation {
+    background-color: #111;
+    border-radius: 0 0 8px 8px;  /* Round bottom corners only */
+    padding: 20px;
+    margin: -20px 10px 0 10px;  /* Negative top margin to eliminate gap, match horizontal padding */
+  }
+
   .slider-section {
     padding: 10px;
     height: 150px;
     background-color: #1a1a1a;
     border-radius: 8px;
     overflow-x: visible;
-    margin-bottom: -5px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -685,8 +732,12 @@
   }
   /* ===== Responsive ===== */
   @media (max-width: 1200px) {
-    .container {
+    .viewport-content {
       padding: 5px;
+    }
+
+    .featured-movies {
+      margin: 15px 5px;
     }
 
     .header-section {
@@ -705,12 +756,13 @@
   }
 
   @media (max-width: 768px) {
-    body {
+    .viewport-content {
       padding: 5px;
     }
 
-    .container {
-      padding: 5px;
+    .featured-movies {
+      margin: 10px 5px;
+      padding: 15px;
     }
 
     .header-section {
@@ -761,11 +813,17 @@
     }
 
     .visualization-section {
-      padding: 5px;
+      padding: 10px;
     }
 
-    #slider-chart {
-      height: 80px;
+    .visualization-continuation {
+      padding: 15px 5px;
+      margin: 0 5px;
+    }
+
+    .slider-section {
+      height: 120px;
+      padding: 8px;
     }
   }
 
