@@ -39,7 +39,7 @@
   /* ===== Integrated Filter & Stats Bar ===== */
   .filter-bar {
     backdrop-filter: blur(10px);
-    padding: 1px 24px;
+    padding: 3px 24px;
     margin: 1px 0 20px 0;
     margin-top: 6px;
     border-radius: 8px;
@@ -271,8 +271,9 @@
   .instructions {
     background-color: #1a1a1a;
     border-left: 3px solid #e50914;
-    padding: 12px 20px;
+    padding: 10px 20px;
     margin-bottom: 10px;
+    margin-top: -5px;
     border-radius: 4px;
   }
 
@@ -570,6 +571,7 @@
     stroke: #ffffff;
     stroke-width: 1px;
     opacity: 0.8;
+    cursor: pointer;
   }
 
   .dot:hover {
@@ -587,7 +589,7 @@
     opacity: 0.8;
   }
 
-  /* ===== Annotations ===== */
+  /* ===== Annotations shadow ===== */
   .annotation-group {
     pointer-events: none;
   }

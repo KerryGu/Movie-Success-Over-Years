@@ -48,13 +48,9 @@ function loadData() {
             myChart.updateYearRange(yearRange);
         });
 
-        // Setup zoom mode toggle button
-        d3.select("#toggle-zoom-mode").on("click", function() {
-            myChart.toggleZoomMode();
-        });
-
         // Setup reset all filters button
         d3.select("#reset-filters").on("click", function() {
+            this.blur(); // Remove focus after click
             // Reset genre selection to all
             myChart.selectedGenres.clear();
             myChart.genres.forEach(genre => myChart.selectedGenres.add(genre));
@@ -71,22 +67,25 @@ function loadData() {
             // Reset legend filters too
             myChart.resetLegend();
 
-            // Reset zoom to default view (and exit zoom mode if active)
-            if (myChart.zoomModeEnabled) {
-                myChart.toggleZoomMode();
-            } else {
-                myChart.resetZoom();
-            }
+            // Reset zoom to default view
+            myChart.resetZoom();
         });
 
         // Setup reset timeline button (new)
         d3.select("#reset-timeline").on("click", function() {
+            this.blur(); // Remove focus after click
             // Reset timeline brush only
             myTimeline.brushGroup.call(myTimeline.brush.move, null);
             myChart.yearRange = null;
 
             // Update chart with current genre filters intact
             myChart.wrangleData();
+        });
+
+        // Remove focus from genre dropdown button after clicking
+        d3.select("#genreDropdownButton").on("click", function() {
+            // Delay blur slightly to allow Bootstrap dropdown to open
+            setTimeout(() => this.blur(), 100);
         });
 
     }).catch(error => {

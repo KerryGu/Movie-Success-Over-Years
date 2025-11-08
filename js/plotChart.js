@@ -7,7 +7,6 @@ class plotChart {
         this.yearRange = null;
         this.isInitialized = false; // Track if charts have been initialized
         this.visibleRatingBands = new Set(['high', 'low']); // Track visible rating bands
-        this.zoomModeEnabled = false; // Start with zoom mode disabled for tooltips to work
 
         const million = 1000000;
         this.yDetailRatio = 0.75; // Portion of vertical space dedicated to 0-500M range
@@ -25,6 +24,9 @@ class plotChart {
 
         vis.DropdownMenu = new DropdownMenu(vis.parentElement, vis.data, vis.genres, vis.selectedGenres, vis.isInitialized, vis.wrangleData.bind(vis));
         vis.DropdownMenu.initVis();
+
+        // Track reset view button state
+        vis.resetViewVisible = false;
 
         vis.wrangleData();
 
@@ -50,6 +52,18 @@ class plotChart {
 
             vis.xScale.range([0, vis.width]);
             vis.xAxisGroup.attr("transform", `translate(0, ${vis.height})`);
+
+            // Update clip-path dimensions (maintain 7px bottom padding)
+            vis.svg.select("#chart-clip rect")
+                .attr("width", vis.width)
+                .attr("height", vis.height + 7);
+
+            // Update zoom extents
+            if (vis.zoom) {
+                vis.zoom
+                    .translateExtent([[0, 0], [vis.width, vis.height]])
+                    .extent([[0, 0], [vis.width, vis.height]]);
+            }
 
             vis.updateVis();
         }
@@ -103,21 +117,21 @@ class plotChart {
             .attr("transform", `translate(${vis.margin.left}, ${vis.margin.top})`);
 
         // Add clip path to prevent dots from showing outside chart area
-        // Add extra padding at bottom to ensure dots on axis are fully visible
+        // Add padding at bottom so dots on x-axis are fully visible (radius 5 + stroke)
         vis.svg.append("defs").append("clipPath")
             .attr("id", "chart-clip")
             .append("rect")
-            .attr("x", -5)  // Small padding on left
-            .attr("y", -5)  // Small padding on top
-            .attr("width", vis.width + 10)  // Add padding on both sides
-            .attr("height", vis.height + 10);  // Extra space at bottom for dots on axis
+            .attr("x", 0)
+            .attr("y", 0)
+            .attr("width", vis.width)
+            .attr("height", vis.height + 7)  // Extra 7px at bottom for full dot visibility
 
         // Scales
         vis.xScale = d3.scaleLinear()
             .range([0, vis.width]);
 
-        vis.yScale = d3.scaleLinear()
-            .clamp(true);
+        vis.yScale = d3.scaleLinear();
+            // Removed .clamp(true) - it was causing dots to stick at boundaries during zoom/pan
 
 
 
@@ -172,36 +186,28 @@ class plotChart {
 
         // Initialize zoom behavior now that dimensions are set
         vis.zoom = d3.zoom()
-            .scaleExtent([0.8, 5]) // More conservative zoom range
-            .translateExtent([[0, 0], [vis.width, vis.height]]) // Keep within chart bounds
-            .extent([[0, 0], [vis.width, vis.height]])
+            .scaleExtent([1, 20]) // Allow zoom from 1x to 20x
+            .translateExtent([[0, 0], [vis.width, vis.height]]) // Constrain panning to chart boundaries
+            .extent([[0, 0], [vis.width, vis.height]]) // Set the viewport extent
             .filter(function(event) {
-                // Allow zoom only with:
-                // - Ctrl/Cmd + scroll (standard zoom gesture)
-                // - Mouse drag (pan)
-                // - Touch events
-                // This prevents accidental zoom on normal scrolling
-                return event.ctrlKey || event.metaKey || event.type === 'mousedown' || event.type.startsWith('touch');
+                // For wheel events, only allow with Ctrl/Cmd key to prevent accidental zoom
+                if (event.type === 'wheel') {
+                    return event.ctrlKey || event.metaKey;
+                }
+                // Allow all other events (drag for pan, touch, etc.)
+                return true;
             })
             .on("zoom", function(event) {
                 vis.zoomed(event);
             });
 
-        // Create a zoom area that covers the chart (add last so it's on top)
-        vis.zoomArea = vis.svg.append("rect")
-            .attr("class", "zoom-area")
-            .attr("width", vis.width)
-            .attr("height", vis.height)
-            .style("fill", "none")
-            .style("pointer-events", "none")  // Start with zoom disabled so tooltips work
-            .style("cursor", "move")
-            .call(vis.zoom);
+        // Apply zoom to the SVG container (not the group) to capture all events
+        vis.svgContainer.call(vis.zoom);
 
-        // Double-click to reset zoom (only works when zoom mode is enabled)
-        vis.zoomArea.on("dblclick.zoom", function() {
-            if (vis.zoomModeEnabled) {
-                vis.resetZoom();
-            }
+        // Override double-click behavior to reset zoom instead of default zoom-in
+        vis.svgContainer.on("dblclick.zoom", null); // Remove default D3 double-click zoom
+        vis.svgContainer.on("dblclick", function() {
+            vis.resetZoom();
         });
 
         // ===== Add Interactive Color Legend (AFTER zoom area so it's on top) =====
@@ -230,11 +236,13 @@ class plotChart {
             .attr("aria-pressed", "true")
             .attr("aria-label", d => `Toggle ${d.label}`)
             .on("click", function(event, d) {
+                this.blur(); // Remove focus after click
                 vis.toggleRatingBand(d.id);
             })
             .on("keypress", function(event, d) {
                 if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
+                    this.blur(); // Remove focus after keypress
                     vis.toggleRatingBand(d.id);
                 }
             });
@@ -270,127 +278,234 @@ class plotChart {
                 vis.updateLegendState(); // Reset to current state
             });
 
-        // Add reset legend button
+        // Add reset legend button - aligned with legend items
         const resetLegendGroup = legend.append("g")
             .attr("class", "reset-legend-btn")
-            .attr("transform", `translate(-5, ${legendSpacing * 2})`)
+            .attr("transform", `translate(0, ${legendSpacing * 2})`)
             .style("cursor", "pointer")
             .attr("tabindex", "0")
             .attr("role", "button")
             .attr("aria-label", "Reset legend filters")
             .on("click", function() {
+                this.blur(); // Remove focus after click
                 vis.resetLegend();
             })
             .on("keypress", function(event) {
                 if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
+                    this.blur(); // Remove focus after keypress
                     vis.resetLegend();
                 }
             });
 
+        // Add symbol aligned with legend circles (at x=0)
         resetLegendGroup.append("text")
             .attr("x", 0)
             .attr("y", 4)
-            .text("↺ Reset legend")
+            .text("↺")
+            .style("fill", "#888")
+            .style("font-size", "12px")
+            .style("font-weight", "500")
+            .style("text-anchor", "middle")
+            .on("mouseover", function() {
+                d3.select(this).style("fill", "#e50914");
+                d3.select(this.parentNode).select(".reset-label").style("fill", "#e50914");
+            })
+            .on("mouseout", function() {
+                d3.select(this).style("fill", "#888");
+                d3.select(this.parentNode).select(".reset-label").style("fill", "#888");
+            });
+
+        // Add text aligned with legend text (at x=12)
+        resetLegendGroup.append("text")
+            .attr("class", "reset-label")
+            .attr("x", 12)
+            .attr("y", 4)
+            .text("Reset legend")
             .style("fill", "#888")
             .style("font-size", "11px")
             .style("font-weight", "500")
             .on("mouseover", function() {
                 d3.select(this).style("fill", "#e50914");
+                d3.select(this.parentNode).select("text").style("fill", "#e50914");
             })
             .on("mouseout", function() {
                 d3.select(this).style("fill", "#888");
+                d3.select(this.parentNode).selectAll("text").style("fill", "#888");
             });
 
-        // Add reset zoom button (initially hidden)
+        // Add reset zoom button (initially hidden) - aligned with legend items
         const resetZoomGroup = legend.append("g")
             .attr("class", "reset-zoom-btn")
-            .attr("transform", `translate(0, ${legendSpacing * 2 + 30})`)
+            .attr("transform", `translate(0, ${legendSpacing * 3 - 5})`)
             .style("cursor", "pointer")
-            .style("display", "none")  // Hidden by default
+            .style("opacity", 0)  // Start invisible
+            .style("pointer-events", "none")  // Disable clicks when invisible
             .attr("tabindex", "0")
             .attr("role", "button")
             .attr("aria-label", "Reset zoom and pan")
             .on("click", function() {
+                this.blur(); // Remove focus to prevent visible focus effect after button fades out
                 vis.resetZoom();
             })
             .on("keypress", function(event) {
                 if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
+                    this.blur(); // Remove focus to prevent visible focus effect after button fades out
                     vis.resetZoom();
                 }
             });
 
+        // Add symbol aligned with legend circles (at x=0)
         resetZoomGroup.append("text")
             .attr("x", 0)
             .attr("y", 4)
-            .text("⟲ Reset view")
+            .text("↺")
+            .style("fill", "#888")
+            .style("font-size", "12px")
+            .style("font-weight", "500")
+            .style("text-anchor", "middle")
+            .on("mouseover", function() {
+                d3.select(this).style("fill", "#e50914");
+                d3.select(this.parentNode).select(".reset-label").style("fill", "#e50914");
+            })
+            .on("mouseout", function() {
+                d3.select(this).style("fill", "#888");
+                d3.select(this.parentNode).select(".reset-label").style("fill", "#888");
+            });
+
+        // Add text aligned with legend text (at x=12)
+        resetZoomGroup.append("text")
+            .attr("class", "reset-label")
+            .attr("x", 12)
+            .attr("y", 4)
+            .text("Reset view")
             .style("fill", "#888")
             .style("font-size", "11px")
             .style("font-weight", "500")
             .on("mouseover", function() {
                 d3.select(this).style("fill", "#e50914");
+                d3.select(this.parentNode).select("text").style("fill", "#e50914");
             })
             .on("mouseout", function() {
                 d3.select(this).style("fill", "#888");
+                d3.select(this.parentNode).selectAll("text").style("fill", "#888");
             });
+
+        // Store legend reference for later updates
+        vis.legend = legend;
+        vis.legendPadding = { top: 15, right: 18, bottom: 15, left: 15 };
+
+        // Add drop shadow filter (only once)
+        const defs = vis.svg.select("defs").empty()
+            ? vis.svg.append("defs")
+            : vis.svg.select("defs");
+
+        const filter = defs.append("filter")
+            .attr("id", "legend-shadow")
+            .attr("x", "-50%")
+            .attr("y", "-50%")
+            .attr("width", "200%")
+            .attr("height", "200%");
+
+        filter.append("feGaussianBlur")
+            .attr("in", "SourceAlpha")
+            .attr("stdDeviation", 4);
+
+        filter.append("feOffset")
+            .attr("dx", 0)
+            .attr("dy", 2)
+            .attr("result", "offsetblur");
+
+        filter.append("feComponentTransfer")
+            .append("feFuncA")
+            .attr("type", "linear")
+            .attr("slope", 0.3);
+
+        const feMerge = filter.append("feMerge");
+        feMerge.append("feMergeNode");
+        feMerge.append("feMergeNode")
+            .attr("in", "SourceGraphic");
+
+        // Create background group and initial background
+        const bgGroup = legend.insert("g", ":first-child")
+            .attr("class", "legend-bg-group");
+
+        bgGroup.append("rect")
+            .attr("class", "legend-background");
+
+        bgGroup.append("rect")
+            .attr("class", "legend-inner-border");
+
+        // Initial background update
+        vis.updateLegendBackground();
     }
 
-
-
-
-
-    // Method to toggle zoom/pan mode
-    toggleZoomMode() {
+    // Update legend background size dynamically
+    updateLegendBackground() {
         let vis = this;
-        vis.zoomModeEnabled = !vis.zoomModeEnabled;
 
-        // Update button text and style
-        const button = d3.select("#toggle-zoom-mode");
-        if (vis.zoomModeEnabled) {
-            button.text("🖱️ Exit Zoom/Pan")
-                  .classed("btn-outline-primary", false)
-                  .classed("btn-primary", true);
+        // Temporarily hide background elements to get accurate content bbox
+        const bgGroup = vis.legend.select(".legend-bg-group");
+        const wasVisible = bgGroup.style("display") !== "none";
+        bgGroup.style("display", "none");
 
-            // Enable zoom area
-            vis.zoomArea.style("pointer-events", "all");
-
-            // Show reset view button only if we're actually zoomed
-            const isActuallyZoomed = vis.currentTransform && (
-                vis.currentTransform.k !== 1 ||
-                vis.currentTransform.x !== 0 ||
-                vis.currentTransform.y !== 0
-            );
-
-            if (isActuallyZoomed) {
-                vis.svg.select(".reset-zoom-btn").style("display", null);
-            } else {
-                vis.svg.select(".reset-zoom-btn").style("display", "none");
-            }
-
-            // Update instructions
-            d3.select(".instructions p").html("<strong>Zoom/Pan Mode Active:</strong> Drag to pan • Cmd+scroll to zoom • Double-click to reset • Click 'Exit Zoom/Pan' to return to exploration mode");
-
-            // Redraw annotations for zoom mode
-            vis.drawAnnotations();
-        } else {
-            button.text("🔍 Enable Zoom/Pan")
-                  .classed("btn-primary", false)
-                  .classed("btn-outline-primary", true);
-
-            // Disable zoom area to allow tooltips
-            vis.zoomArea.style("pointer-events", "none");
-
-            // In explore mode, never show the reset button
-            vis.svg.select(".reset-zoom-btn").style("display", "none");
-
-            // Update instructions back to default
-            d3.select(".instructions p").html("<strong>How to explore:</strong> Select genres from dropdown • Click legend items to toggle ratings • Click 'Enable Zoom/Pan' to zoom & pan • Drag on timeline to filter years • Hover over dots for movie details");
-
-            // Just redraw annotations without resetting the zoom
-            vis.drawAnnotations();
+        // Also temporarily hide reset view button if it's not visible
+        const resetViewBtn = vis.legend.select(".reset-zoom-btn");
+        const resetViewWasVisible = resetViewBtn.style("display") !== "none";
+        if (!vis.resetViewVisible) {
+            resetViewBtn.style("display", "none");
         }
+
+        // Get bbox of content only (excluding background and hidden button)
+        const legendBBox = vis.legend.node().getBBox();
+
+        // Restore background visibility
+        if (wasVisible) {
+            bgGroup.style("display", null);
+        }
+
+        // Restore reset view button visibility
+        if (!vis.resetViewVisible && resetViewWasVisible) {
+            resetViewBtn.style("display", null);
+        }
+
+        const padding = vis.legendPadding;
+
+        // Update background rectangle with smooth transition
+        vis.legend.select(".legend-background")
+            .transition()
+            .duration(300)
+            .attr("x", legendBBox.x - padding.left)
+            .attr("y", legendBBox.y - padding.top)
+            .attr("width", legendBBox.width + padding.left + padding.right)
+            .attr("height", legendBBox.height + padding.top + padding.bottom)
+            .attr("rx", 8)
+            .attr("ry", 8)
+            .style("fill", "rgba(0, 0, 0, 0.85)")
+            .style("stroke", "rgba(255, 255, 255, 0.1)")
+            .style("stroke-width", 1.5)
+            .style("filter", "url(#legend-shadow)");
+
+        // Update inner border
+        vis.legend.select(".legend-inner-border")
+            .transition()
+            .duration(300)
+            .attr("x", legendBBox.x - padding.left + 1)
+            .attr("y", legendBBox.y - padding.top + 1)
+            .attr("width", legendBBox.width + padding.left + padding.right - 2)
+            .attr("height", legendBBox.height + padding.top + padding.bottom - 2)
+            .attr("rx", 7)
+            .attr("ry", 7)
+            .style("fill", "none")
+            .style("stroke", "rgba(255, 255, 255, 0.05)")
+            .style("stroke-width", 1);
     }
+
+
+
+
+
 
     // Method to handle year range updates from Timeline
     updateYearRange(yearRange) {
@@ -403,25 +518,52 @@ class plotChart {
     zoomed(event) {
         let vis = this;
 
-        // Only process zoom events when zoom mode is enabled
-        if (!vis.zoomModeEnabled) return;
-
         vis.currentTransform = event.transform;
 
         // Show reset view button when zoomed (not at identity)
-        if (event.transform.k !== 1 || event.transform.x !== 0 || event.transform.y !== 0) {
-            vis.svg.select(".reset-zoom-btn").style("display", null);
-        } else {
-            vis.svg.select(".reset-zoom-btn").style("display", "none");
+        const shouldShowResetView = (event.transform.k !== 1 || event.transform.x !== 0 || event.transform.y !== 0);
+
+        // Only update if state changed
+        if (shouldShowResetView !== vis.resetViewVisible) {
+            vis.resetViewVisible = shouldShowResetView;
+
+            if (shouldShowResetView) {
+                vis.svg.select(".reset-zoom-btn")
+                    .transition()
+                    .duration(300)
+                    .style("opacity", 1)
+                    .style("pointer-events", "all");
+            } else {
+                vis.svg.select(".reset-zoom-btn")
+                    .transition()
+                    .duration(300)
+                    .style("opacity", 0)
+                    .style("pointer-events", "none");
+            }
+
+            // Update legend background only when state changes
+            setTimeout(() => vis.updateLegendBackground(), 50);
         }
 
         // Create new scales based on zoom transform
         const newXScale = event.transform.rescaleX(vis.xScale);
         const newYScale = event.transform.rescaleY(vis.yScale);
 
+        // During zoom, use automatic tick generation for y-axis to prevent clustering
+        // Clear any custom tick values set by the compressed scale
+        const yAxisForZoom = d3.axisLeft(newYScale)
+            .tickFormat(d => `$${(d / 1000000).toFixed(0)}M`)
+            .tickSizeOuter(0)
+            .tickSizeInner(6)
+            .tickPadding(8)
+            .ticks(8); // Use automatic tick generation with ~8 ticks
+
         // Update axes with new scales
         vis.xAxisGroup.call(vis.xAxis.scale(newXScale));
-        vis.yAxisGroup.call(vis.yAxis.scale(newYScale));
+        vis.yAxisGroup.call(yAxisForZoom);
+
+        // Remove axis break indicator when zoomed (since we use regular scale during zoom)
+        vis.yAxisGroup.selectAll(".axis-break").remove();
 
         // Update dots positions with new scales
         vis.chartArea.selectAll(".dot")
@@ -436,29 +578,26 @@ class plotChart {
     resetZoom() {
         let vis = this;
 
-        // Only allow reset if we're in zoom mode OR if we're actually zoomed
-        const isActuallyZoomed = vis.currentTransform && (
-            vis.currentTransform.k !== 1 ||
-            vis.currentTransform.x !== 0 ||
-            vis.currentTransform.y !== 0
-        );
-
-        if (!vis.zoomModeEnabled && !isActuallyZoomed) {
-            // Don't do anything if we're in explore mode and not zoomed
-            return;
-        }
-
         vis.currentTransform = d3.zoomIdentity;
-        vis.zoomArea.transition()
+
+        // Apply the reset with a smooth transition
+        vis.svgContainer.transition()
             .duration(750)
             .call(vis.zoom.transform, d3.zoomIdentity)
             .on("end", function() {
-                // After zoom reset completes, redraw annotations
-                vis.drawAnnotations();
+                // After zoom reset completes, redraw chart to restore axis-break and other elements
+                vis.updateVis();
 
-                // Always hide reset view button after reset completes
-                // (since we're now at identity transform)
-                vis.svg.select(".reset-zoom-btn").style("display", "none");
+                // Hide reset view button after reset completes with transition
+                vis.svg.select(".reset-zoom-btn")
+                    .transition()
+                    .duration(300)
+                    .style("opacity", 0)
+                    .style("pointer-events", "none");
+                vis.resetViewVisible = false;
+
+                // Update legend background after hiding reset view button
+                setTimeout(() => vis.updateLegendBackground(), 50);
             });
     }
 
@@ -514,25 +653,30 @@ class plotChart {
                 }
             });
 
-        // Update annotation backgrounds
-        vis.svg.selectAll(".annotation-group rect")
-            .each(function() {
-                // Check for both annotation labels
-                let label = d3.select(this.parentNode).select(".annotation-label");
-                if (label.empty()) {
-                    label = d3.select(this.parentNode).select(".annotation-label-2");
-                }
+        // Update annotation backgrounds - match each background to its specific label
+        // Update first annotation background
+        const bg1 = vis.svg.select(".annotation-bg-1");
+        const label1 = vis.svg.select(".annotation-label");
+        if (!bg1.empty() && !label1.empty() && label1.node()) {
+            const labelBBox1 = label1.node().getBBox();
+            bg1.attr("x", labelBBox1.x - 3)
+                .attr("y", labelBBox1.y - 1)
+                .attr("width", labelBBox1.width + 6)
+                .attr("height", labelBBox1.height + 2)
+                .style("opacity", 0.85);
+        }
 
-                if (!label.empty() && label.node()) {
-                    const labelBBox = label.node().getBBox();
-                    d3.select(this)
-                        .attr("x", labelBBox.x - 3)
-                        .attr("y", labelBBox.y - 1)
-                        .attr("width", labelBBox.width + 6)
-                        .attr("height", labelBBox.height + 2)
-                        .style("opacity", 0.85);  // Ensure consistent opacity
-                }
-            });
+        // Update second annotation background
+        const bg2 = vis.svg.select(".annotation-bg-2");
+        const label2 = vis.svg.select(".annotation-label-2");
+        if (!bg2.empty() && !label2.empty() && label2.node()) {
+            const labelBBox2 = label2.node().getBBox();
+            bg2.attr("x", labelBBox2.x - 3)
+                .attr("y", labelBBox2.y - 1)
+                .attr("width", labelBBox2.width + 6)
+                .attr("height", labelBBox2.height + 2)
+                .style("opacity", 0.85);
+        }
     }
 
     // Method to toggle rating band visibility
@@ -758,7 +902,12 @@ class plotChart {
         // Add axis break indicator for truncated y-axis (Kerry's feature)
         vis.yAxisGroup.selectAll(".axis-break").remove();
 
-        if (needsCompressedScale && !vis.currentTransform) {
+        // Only show axis break when not zoomed/panned (at identity transform)
+        const isAtIdentity = vis.currentTransform.k === 1 &&
+                            vis.currentTransform.x === 0 &&
+                            vis.currentTransform.y === 0;
+
+        if (needsCompressedScale && isAtIdentity) {
             const breakY = vis.yScale(vis.yBreakDetailed);
             const breakWidth = 10;
             const breakHeight = 12;
@@ -995,7 +1144,7 @@ class plotChart {
             }
 
             // Start with full title
-            let fullText = `★ ${highestGrossing.Series_Title}`;
+            let fullText = `💰 ${highestGrossing.Series_Title}`;
 
             // Create temporary text element to measure actual width
             let tempText = annotationGroup.append("text")
@@ -1018,7 +1167,7 @@ class plotChart {
                 // Text too long - truncate
                 let maxChars = Math.floor((availableWidth / actualWidth) * titleText.length) - 5;
                 titleText = titleText.substring(0, Math.max(maxChars, 15)) + "...";
-                fullText = `★ ${titleText}`;
+                fullText = `💰 ${titleText}`;
 
                 // Re-measure after truncation
                 tempText = annotationGroup.append("text")
@@ -1091,6 +1240,7 @@ class plotChart {
             // Add subtle background for readability
             let labelBBox = annotationGroup.select(".annotation-label").node().getBBox();
             const bgRect = annotationGroup.insert("rect", ".annotation-label")
+                .attr("class", "annotation-bg-1")
                 .attr("x", labelBBox.x - 3)
                 .attr("y", labelBBox.y - 1)
                 .attr("width", labelBBox.width + 6)
@@ -1263,13 +1413,14 @@ class plotChart {
                         .style("opacity", 1);
                 }
 
-                // Add background
-                let labelBBox = annotationGroup.select(".annotation-label-2").node().getBBox();
+                // Add subtle background for readability (second annotation)
+                let labelBBox2 = annotationGroup.select(".annotation-label-2").node().getBBox();
                 const bgRect2 = annotationGroup.insert("rect", ".annotation-label-2")
-                    .attr("x", labelBBox.x - 3)
-                    .attr("y", labelBBox.y - 1)
-                    .attr("width", labelBBox.width + 6)
-                    .attr("height", labelBBox.height + 2)
+                    .attr("class", "annotation-bg-2")
+                    .attr("x", labelBBox2.x - 3)
+                    .attr("y", labelBBox2.y - 1)
+                    .attr("width", labelBBox2.width + 6)
+                    .attr("height", labelBBox2.height + 2)
                     .style("fill", "#111");
 
                 if (isZoomed) {
