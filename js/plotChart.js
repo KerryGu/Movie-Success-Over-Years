@@ -5,6 +5,7 @@ class plotChart {
         this.displayData = [];
         this.selectedGenres = new Set();
         this.yearRange = null;
+        this.ratingRange = [0, 10]; // Rating range filter: [min, max]
         this.isInitialized = false; // Track if charts have been initialized
         this.visibleRatingBands = new Set(['high', 'low']); // Track visible rating bands
 
@@ -263,6 +264,15 @@ class plotChart {
             .text(d => d.label)
             .style("fill", "#ccc");
 
+        // Add count text for each legend item
+        legendItems.append("text")
+            .attr("class", "legend-count")
+            .attr("x", 12)
+            .attr("y", 15)
+            .text("(0 movies)")
+            .style("fill", "#888")
+            .style("font-size", "10px");
+
         // Add hover effects for better discoverability
         legendItems
             .on("mouseover", function(event, d) {
@@ -514,6 +524,13 @@ class plotChart {
         vis.wrangleData();
     }
 
+    // Method to handle rating range updates
+    updateRatingRange(ratingRange) {
+        let vis = this;
+        vis.ratingRange = ratingRange;
+        vis.wrangleData();
+    }
+
     // Zoom event handler
     zoomed(event) {
         let vis = this;
@@ -735,20 +752,98 @@ class plotChart {
             });
     }
 
-    wrangleData() {
+    // Calculate and update per-band counts in legend
+    updateLegendCounts() {
         let vis = this;
 
+        // Calculate counts for data BEFORE legend visibility filter
+        // This means we apply: year range → genre → rating range, then count by bands
+        let dataBeforeLegend = vis.data.slice();
+
+        // Apply year range filter
+        if (vis.yearRange) {
+            dataBeforeLegend = dataBeforeLegend.filter(d =>
+                d.Released_Year >= vis.yearRange[0] && d.Released_Year <= vis.yearRange[1]
+            );
+        }
+
+        // Apply genre filter
         if (vis.selectedGenres.size === 0) {
-            vis.displayData = [];
+            dataBeforeLegend = [];
         } else {
-            vis.displayData = vis.data.filter(d => {
+            dataBeforeLegend = dataBeforeLegend.filter(d => {
                 if (!d.Genre) return false;
                 let movieGenres = d.Genre.split(',').map(g => g.trim());
                 return movieGenres.some(genre => vis.selectedGenres.has(genre));
             });
         }
 
-        // Filter by rating bands
+        // Apply rating range filter
+        dataBeforeLegend = dataBeforeLegend.filter(d => {
+            const rating = d.IMDB_Rating;
+            return rating >= vis.ratingRange[0] && rating <= vis.ratingRange[1];
+        });
+
+        // Count movies per band
+        const bandCounts = {
+            high: dataBeforeLegend.filter(d => d.IMDB_Rating >= 8).length,
+            low: dataBeforeLegend.filter(d => d.IMDB_Rating < 8).length
+        };
+
+        // Update legend item counts and ghost state
+        vis.svg.selectAll(".legend-item")
+            .each(function(d) {
+                const count = bandCounts[d.id] || 0;
+                const countText = count === 1 ? "1 movie" : `${count} movies`;
+
+                // Update count text
+                d3.select(this).select(".legend-count")
+                    .text(`(${countText})`);
+
+                // Apply ghosted state if count is 0
+                if (count === 0) {
+                    d3.select(this).classed("ghosted", true);
+                    d3.select(this).style("pointer-events", "none");
+                } else {
+                    d3.select(this).classed("ghosted", false);
+                    d3.select(this).style("pointer-events", "all");
+                }
+            });
+    }
+
+    wrangleData() {
+        let vis = this;
+
+        // Start with all data
+        vis.displayData = vis.data.slice();
+
+        // Filter order: timeline brush → genre → rating range → legend visibility
+
+        // 1. Filter by year range if brush is active
+        if (vis.yearRange) {
+            vis.displayData = vis.displayData.filter(d =>
+                d.Released_Year >= vis.yearRange[0] && d.Released_Year <= vis.yearRange[1]
+            );
+        }
+
+        // 2. Filter by genre
+        if (vis.selectedGenres.size === 0) {
+            vis.displayData = [];
+        } else {
+            vis.displayData = vis.displayData.filter(d => {
+                if (!d.Genre) return false;
+                let movieGenres = d.Genre.split(',').map(g => g.trim());
+                return movieGenres.some(genre => vis.selectedGenres.has(genre));
+            });
+        }
+
+        // 3. Filter by rating range
+        vis.displayData = vis.displayData.filter(d => {
+            const rating = d.IMDB_Rating;
+            return rating >= vis.ratingRange[0] && rating <= vis.ratingRange[1];
+        });
+
+        // 4. Filter by rating band visibility (legend)
         vis.displayData = vis.displayData.filter(d => {
             const rating = d.IMDB_Rating;
             if (rating >= 8 && vis.visibleRatingBands.has('high')) return true;
@@ -756,16 +851,12 @@ class plotChart {
             return false;
         });
 
-        // Filter by year range if brush is active
-        if (vis.yearRange) {
-            vis.displayData = vis.displayData.filter(d =>
-                d.Released_Year >= vis.yearRange[0] && d.Released_Year <= vis.yearRange[1]
-            );
-        }
-
         vis.isInitialized = true;
 
         vis.displayData.sort((a, b) => a.IMDB_Rating - b.IMDB_Rating);
+
+        // Update legend counts before updating statistics
+        vis.updateLegendCounts();
 
         vis.updateStatistics();
 
