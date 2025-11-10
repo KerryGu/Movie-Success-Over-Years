@@ -287,14 +287,14 @@ class plotChart {
             .text(d => d.label)
             .style("fill", "#ccc");
 
-        // Add count text for each legend item
+        // Add count text for each legend item (positioned after label)
         legendItems.append("text")
             .attr("class", "legend-count")
             .attr("x", 12)
-            .attr("y", 15)
-            .text("(0 movies)")
+            .attr("y", 4)
+            .text(" · 0")
             .style("fill", "#888")
-            .style("font-size", "10px");
+            .style("font-size", "11px");
 
         // Add hover effects for better discoverability
         legendItems
@@ -375,15 +375,15 @@ class plotChart {
             .attr("class", "legend-divider")
             .attr("x1", -10)
             .attr("x2", 150)
-            .attr("y1", thresholdY - 8)
-            .attr("y2", thresholdY - 8)
+            .attr("y1", thresholdY - 15)
+            .attr("y2", thresholdY - 15)
             .style("stroke", "#444")
             .style("stroke-width", 1);
 
         // Threshold label
         legend.append("text")
             .attr("class", "threshold-label")
-            .attr("x", 0)
+            .attr("x", -5)
             .attr("y", thresholdY + 5)
             .text("Rating split")
             .style("fill", "#aaa")
@@ -393,8 +393,8 @@ class plotChart {
         // Live threshold display
         legend.append("text")
             .attr("id", "threshold-display")
-            .attr("x", 0)
-            .attr("y", thresholdY + 20)
+            .attr("x", -5)
+            .attr("y", thresholdY + 21)
             .text(vis.ratingSplit.toFixed(1))
             .style("fill", "#e50914")
             .style("font-size", "11px")
@@ -403,10 +403,10 @@ class plotChart {
         // Threshold slider
         const sliderY = thresholdY + 35;
         const sliderFO = legend.append("foreignObject")
-            .attr("x", 0)
-            .attr("y", sliderY - 10)
+            .attr("x", -5)
+            .attr("y", sliderY - 18)
             .attr("width", 150)
-            .attr("height", 20)
+            .attr("height", 25)
             .style("pointer-events", "all");
 
         sliderFO.append("xhtml:input")
@@ -425,10 +425,11 @@ class plotChart {
             .style("width", "100%")
             .style("pointer-events", "all");
 
-        // Add reset zoom button (initially hidden) - aligned with legend items
+        // Add reset zoom button (initially hidden) - positioned after threshold slider
+        const resetViewY = sliderY + 30; // Position after slider with spacing
         const resetZoomGroup = legend.append("g")
             .attr("class", "reset-zoom-btn")
-            .attr("transform", `translate(0, ${legendSpacing * 3 - 5})`)
+            .attr("transform", `translate(0, ${resetViewY - 6})`)
             .style("cursor", "pointer")
             .style("opacity", 0)  // Start invisible
             .style("pointer-events", "none")  // Disable clicks when invisible
@@ -993,8 +994,13 @@ class plotChart {
                 const count = bandCounts[d.id] || 0;
                 const countText = count === 1 ? "1 movie" : `${count} movies`;
 
-                // Update count text - use middot separator
+                // Get label width to position count after it
+                const labelElement = d3.select(this).select(".legend-label");
+                const labelWidth = labelElement.node().getBBox().width;
+
+                // Update count text - use middot separator, positioned after label
                 d3.select(this).select(".legend-count")
+                    .attr("x", 12 + labelWidth + 5)
                     .text(` · ${count}`);
 
                 // Apply ghosted state if count is 0
