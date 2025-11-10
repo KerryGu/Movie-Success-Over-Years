@@ -5,7 +5,8 @@ class plotChart {
         this.displayData = [];
         this.selectedGenres = new Set();
         this.yearRange = null;
-        this.ratingRange = [0, 10]; // Rating range filter: [min, max]
+        this.ratingSplit = 8.0; // Threshold to split High (≥ t) vs Low (< t)
+        this.ratingExtent = [0, 10]; // Min/max ratings in dataset (computed on init)
         this.isInitialized = false; // Track if charts have been initialized
         this.visibleRatingBands = new Set(['high', 'low']); // Track visible rating bands
 
@@ -19,6 +20,15 @@ class plotChart {
 
     initVis() {
         let vis = this;
+
+        // Compute rating extent from data
+        vis.ratingExtent = d3.extent(vis.data, d => d.IMDB_Rating);
+        // Round outward to nearest 0.1
+        vis.ratingExtent[0] = Math.floor(vis.ratingExtent[0] * 10) / 10;
+        vis.ratingExtent[1] = Math.ceil(vis.ratingExtent[1] * 10) / 10;
+
+        // Clamp default threshold to data extent
+        vis.ratingSplit = Math.max(vis.ratingExtent[0], Math.min(vis.ratingSplit, vis.ratingExtent[1]));
 
         vis.extractGenres();
         vis.initMainChart();
@@ -136,9 +146,10 @@ class plotChart {
 
 
 
+        // Color scale based on dynamic rating threshold
         vis.colorScale = d3.scaleThreshold()
-            .domain([8])
-            .range(["#005AB5", "#ff2919ff"]);
+            .domain([vis.ratingSplit])
+            .range([vis.lowColor, vis.highColor]);
 
         vis.xAxis = d3.axisBottom(vis.xScale)
             .tickFormat(d3.format("d"));
@@ -191,6 +202,14 @@ class plotChart {
             .translateExtent([[0, 0], [vis.width, vis.height]]) // Constrain panning to chart boundaries
             .extent([[0, 0], [vis.width, vis.height]]) // Set the viewport extent
             .filter(function(event) {
+                // Exclude events from rating sliders or legend interactive elements
+                const target = event.target;
+                if (target.tagName === 'INPUT' ||
+                    target.closest('.rating-slider-legend') ||
+                    target.closest('foreignObject')) {
+                    return false;
+                }
+
                 // For wheel events, only allow with Ctrl/Cmd key to prevent accidental zoom
                 if (event.type === 'wheel') {
                     return event.ctrlKey || event.metaKey;
@@ -216,8 +235,8 @@ class plotChart {
         const legendSpacing = 28;
 
         const legendData = [
-            { id: "high", color: "#ff2919ff", label: "High (≥8) IMDB Rating", threshold: 8 },
-            { id: "low", color: "#005AB5", label: "Low (<8) IMDB Rating", threshold: 0 }
+            { id: "high", color: "#ff2919ff", label: `High (≥${vis.ratingSplit.toFixed(1)})`, threshold: vis.ratingSplit },
+            { id: "low", color: "#005AB5", label: `Low (<${vis.ratingSplit.toFixed(1)})`, threshold: 0 }
         ];
 
         const legend = vis.svg.append("g")
@@ -343,6 +362,64 @@ class plotChart {
                 d3.select(this).style("fill", "#888");
                 d3.select(this.parentNode).selectAll("text").style("fill", "#888");
             });
+
+        // ===== Add Rating Split Threshold Control =====
+        const thresholdY = legendSpacing * 3 + 5;
+
+        // Add divider line
+        legend.append("line")
+            .attr("class", "legend-divider")
+            .attr("x1", -10)
+            .attr("x2", 150)
+            .attr("y1", thresholdY - 8)
+            .attr("y2", thresholdY - 8)
+            .style("stroke", "#444")
+            .style("stroke-width", 1);
+
+        // Threshold label
+        legend.append("text")
+            .attr("class", "threshold-label")
+            .attr("x", 0)
+            .attr("y", thresholdY + 5)
+            .text("Rating split")
+            .style("fill", "#aaa")
+            .style("font-size", "11px")
+            .style("font-weight", "500");
+
+        // Live threshold display
+        legend.append("text")
+            .attr("id", "threshold-display")
+            .attr("x", 0)
+            .attr("y", thresholdY + 20)
+            .text(vis.ratingSplit.toFixed(1))
+            .style("fill", "#e50914")
+            .style("font-size", "11px")
+            .style("font-weight", "600");
+
+        // Threshold slider
+        const sliderY = thresholdY + 35;
+        const sliderFO = legend.append("foreignObject")
+            .attr("x", 0)
+            .attr("y", sliderY - 10)
+            .attr("width", 150)
+            .attr("height", 20)
+            .style("pointer-events", "all");
+
+        sliderFO.append("xhtml:input")
+            .attr("type", "range")
+            .attr("id", "rating-threshold-slider")
+            .attr("class", "rating-threshold-slider")
+            .attr("min", vis.ratingExtent[0])
+            .attr("max", vis.ratingExtent[1])
+            .attr("step", 0.1)
+            .attr("value", vis.ratingSplit)
+            .attr("aria-label", "Rating split threshold")
+            .attr("aria-valuemin", vis.ratingExtent[0])
+            .attr("aria-valuemax", vis.ratingExtent[1])
+            .attr("aria-valuenow", vis.ratingSplit)
+            .attr("aria-valuetext", `High if rating ≥ ${vis.ratingSplit.toFixed(1)}, Low otherwise`)
+            .style("width", "100%")
+            .style("pointer-events", "all");
 
         // Add reset zoom button (initially hidden) - aligned with legend items
         const resetZoomGroup = legend.append("g")
@@ -524,10 +601,18 @@ class plotChart {
         vis.wrangleData();
     }
 
-    // Method to handle rating range updates
-    updateRatingRange(ratingRange) {
+    // Method to handle rating split threshold updates
+    updateRatingSplit(threshold) {
         let vis = this;
-        vis.ratingRange = ratingRange;
+        vis.ratingSplit = threshold;
+
+        // Update color scale domain
+        vis.colorScale.domain([vis.ratingSplit]);
+
+        // Update legend labels to reflect new threshold
+        vis.updateLegendLabels();
+
+        // Re-wrangle data to re-bin movies
         vis.wrangleData();
     }
 
@@ -713,18 +798,89 @@ class plotChart {
         vis.wrangleData();
     }
 
-    // Method to reset legend filters
+    // Method to reset legend filters and threshold
     resetLegend() {
         let vis = this;
+
+        // Reset visibility: turn both bands ON
         vis.visibleRatingBands.clear();
         vis.visibleRatingBands.add('high');
         vis.visibleRatingBands.add('low');
 
-        // Update legend visual state
+        // Reset threshold to default 8.0 (clamped to data extent)
+        const defaultThreshold = 8.0;
+        vis.ratingSplit = Math.max(vis.ratingExtent[0], Math.min(defaultThreshold, vis.ratingExtent[1]));
+
+        // Update threshold slider
+        d3.select("#rating-threshold-slider").property("value", vis.ratingSplit);
+
+        // Update legend labels and visual state
+        vis.updateLegendLabels();
         vis.updateLegendState();
 
         // Refresh visualization
         vis.wrangleData();
+    }
+
+    // Method to update legend labels based on current threshold
+    updateLegendLabels() {
+        let vis = this;
+
+        // Update legend item labels
+        vis.svg.selectAll(".legend-item").each(function(d) {
+            const newLabel = d.id === 'high'
+                ? `High (≥${vis.ratingSplit.toFixed(1)})`
+                : `Low (<${vis.ratingSplit.toFixed(1)})`;
+
+            d3.select(this).select(".legend-label").text(newLabel);
+        });
+
+        // Update threshold display
+        d3.select("#threshold-display").text(vis.ratingSplit.toFixed(1));
+
+        // Update slider ARIA
+        d3.select("#rating-threshold-slider")
+            .attr("aria-valuenow", vis.ratingSplit)
+            .attr("aria-valuetext", `High if rating ≥ ${vis.ratingSplit.toFixed(1)}, Low otherwise`);
+    }
+
+    // Show empty state overlay when both bands are hidden
+    showEmptyStateOverlay() {
+        let vis = this;
+
+        // Remove existing overlay if present
+        d3.select("#empty-state-overlay").remove();
+
+        // Create overlay
+        const overlay = d3.select(".main-chart-section")
+            .append("div")
+            .attr("id", "empty-state-overlay")
+            .attr("class", "empty-state-overlay")
+            .style("opacity", 0);
+
+        overlay.append("p")
+            .text("No rating bands are visible.");
+
+        overlay.append("p")
+            .html('Turn a band on in the legend or <span class="reset-link">reset legend</span>.')
+            .select(".reset-link")
+            .on("click", function() {
+                vis.resetLegend();
+            });
+
+        // Fade in
+        overlay.transition()
+            .duration(300)
+            .style("opacity", 1);
+    }
+
+    // Hide empty state overlay
+    hideEmptyStateOverlay() {
+        d3.select("#empty-state-overlay")
+            .transition()
+            .duration(200)
+            .style("opacity", 0)
+            .remove();
     }
 
     // Update legend visual state based on active filters
@@ -757,7 +913,7 @@ class plotChart {
         let vis = this;
 
         // Calculate counts for data BEFORE legend visibility filter
-        // This means we apply: year range → genre → rating range, then count by bands
+        // Pipeline: year range → genre → re-bin by threshold, then count
         let dataBeforeLegend = vis.data.slice();
 
         // Apply year range filter
@@ -778,16 +934,15 @@ class plotChart {
             });
         }
 
-        // Apply rating range filter
-        dataBeforeLegend = dataBeforeLegend.filter(d => {
-            const rating = d.IMDB_Rating;
-            return rating >= vis.ratingRange[0] && rating <= vis.ratingRange[1];
+        // Re-bin by current threshold
+        dataBeforeLegend.forEach(d => {
+            d.ratingBand = d.IMDB_Rating >= vis.ratingSplit ? 'high' : 'low';
         });
 
         // Count movies per band
         const bandCounts = {
-            high: dataBeforeLegend.filter(d => d.IMDB_Rating >= 8).length,
-            low: dataBeforeLegend.filter(d => d.IMDB_Rating < 8).length
+            high: dataBeforeLegend.filter(d => d.ratingBand === 'high').length,
+            low: dataBeforeLegend.filter(d => d.ratingBand === 'low').length
         };
 
         // Update legend item counts and ghost state
@@ -796,9 +951,9 @@ class plotChart {
                 const count = bandCounts[d.id] || 0;
                 const countText = count === 1 ? "1 movie" : `${count} movies`;
 
-                // Update count text
+                // Update count text - use middot separator
                 d3.select(this).select(".legend-count")
-                    .text(`(${countText})`);
+                    .text(` · ${count}`);
 
                 // Apply ghosted state if count is 0
                 if (count === 0) {
@@ -817,7 +972,7 @@ class plotChart {
         // Start with all data
         vis.displayData = vis.data.slice();
 
-        // Filter order: timeline brush → genre → rating range → legend visibility
+        // Filter pipeline: timeline brush → genre → re-bin by threshold → legend visibility
 
         // 1. Filter by year range if brush is active
         if (vis.yearRange) {
@@ -837,19 +992,13 @@ class plotChart {
             });
         }
 
-        // 3. Filter by rating range
-        vis.displayData = vis.displayData.filter(d => {
-            const rating = d.IMDB_Rating;
-            return rating >= vis.ratingRange[0] && rating <= vis.ratingRange[1];
+        // 3. Re-bin by rating threshold (does NOT drop data, just assigns band)
+        vis.displayData.forEach(d => {
+            d.ratingBand = d.IMDB_Rating >= vis.ratingSplit ? 'high' : 'low';
         });
 
-        // 4. Filter by rating band visibility (legend)
-        vis.displayData = vis.displayData.filter(d => {
-            const rating = d.IMDB_Rating;
-            if (rating >= 8 && vis.visibleRatingBands.has('high')) return true;
-            if (rating < 8 && vis.visibleRatingBands.has('low')) return true;
-            return false;
-        });
+        // 4. Filter by rating band visibility (legend toggles)
+        vis.displayData = vis.displayData.filter(d => vis.visibleRatingBands.has(d.ratingBand));
 
         vis.isInitialized = true;
 
@@ -926,11 +1075,24 @@ class plotChart {
     updateVis() {
         let vis = this;
 
+        // Check if both rating bands are hidden (empty due to visibility toggle)
+        const bothBandsHidden = vis.visibleRatingBands.size === 0;
+
         if (vis.displayData.length === 0) {
             vis.chartArea.selectAll(".dot").remove();
             vis.svg.selectAll(".annotation-group").remove(); // Clear annotations when no data
+
+            // Show empty state overlay if both bands are hidden
+            if (bothBandsHidden) {
+                vis.showEmptyStateOverlay();
+            } else {
+                vis.hideEmptyStateOverlay();
+            }
             return;
         }
+
+        // Hide empty state overlay when data is present
+        vis.hideEmptyStateOverlay();
 
         if (vis.yearRange) {
             vis.xScale.domain([

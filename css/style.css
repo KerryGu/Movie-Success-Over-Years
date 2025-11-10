@@ -300,173 +300,102 @@
     border-color: #e50914;
   }
 
-  /* ===== Rating Range Controls ===== */
-  .rating-range-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  /* ===== Rating Split Threshold Control in Legend ===== */
+  .rating-threshold-slider {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, #005AB5 0%, #ff2919ff 100%);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
   }
 
-  .rating-range-toggle {
-    background-color: transparent;
-    border: none;
-    color: #aaa;
-    padding: 4px 8px;
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    transition: color 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+  .rating-threshold-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e50914;
+    cursor: pointer;
+    border: 2px solid #fff;
+    transition: all 0.2s ease;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
   }
 
-  .rating-range-toggle:hover,
-  .rating-range-toggle:focus {
-    color: #fff;
-    text-decoration: none;
-    background-color: transparent;
+  .rating-threshold-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e50914;
+    cursor: pointer;
+    border: 2px solid #fff;
+    transition: all 0.2s ease;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
   }
 
-  .collapse-arrow {
-    font-size: 12px;
-    transition: transform 0.3s ease;
-    display: inline-block;
+  .rating-threshold-slider::-webkit-slider-thumb:hover {
+    background: #ff6b6b;
+    transform: scale(1.2);
   }
 
-  .rating-range-toggle[aria-expanded="true"] .collapse-arrow {
-    transform: rotate(90deg);
+  .rating-threshold-slider::-moz-range-thumb:hover {
+    background: #ff6b6b;
+    transform: scale(1.2);
   }
 
-  .rating-range-controls {
-    background-color: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 6px;
-    padding: 12px 14px;
-    margin-top: 4px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  .rating-threshold-slider:focus {
+    outline: none;
   }
 
-  .rating-range-label {
-    font-size: 13px;
+  .rating-threshold-slider:focus-visible {
+    box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.4);
+  }
+
+  .rating-threshold-slider:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.5);
+  }
+
+  .rating-threshold-slider:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.5);
+  }
+
+  /* Legend divider line */
+  .legend-divider {
+    pointer-events: none;
+  }
+
+  /* Empty state overlay */
+  .empty-state-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(26, 26, 26, 0.95);
+    border: 2px solid #e50914;
+    border-radius: 8px;
+    padding: 30px 40px;
+    text-align: center;
+    z-index: 100;
+    pointer-events: all;
+  }
+
+  .empty-state-overlay p {
+    margin: 0 0 15px 0;
     color: #ccc;
-    font-weight: 500;
-    margin: 0;
+    font-size: 14px;
   }
 
-  #rating-range-display {
+  .empty-state-overlay .reset-link {
     color: #e50914;
-    font-weight: 600;
-  }
-
-  .rating-sliders {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .slider-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .slider-label {
-    font-size: 12px;
-    color: #999;
+    text-decoration: underline;
+    cursor: pointer;
     font-weight: 500;
-    min-width: 35px;
-    margin: 0;
   }
 
-  .rating-slider {
-    flex: 1;
-    height: 6px;
-    border-radius: 3px;
-    background: linear-gradient(to right, #333 0%, #666 100%);
-    outline: none;
-    -webkit-appearance: none;
-    appearance: none;
-    cursor: pointer;
-  }
-
-  .rating-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #e50914;
-    cursor: pointer;
-    border: 2px solid #fff;
-    transition: all 0.2s ease;
-  }
-
-  .rating-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #e50914;
-    cursor: pointer;
-    border: 2px solid #fff;
-    transition: all 0.2s ease;
-  }
-
-  .rating-slider::-webkit-slider-thumb:hover {
-    background: #ff6b6b;
-    transform: scale(1.1);
-  }
-
-  .rating-slider::-moz-range-thumb:hover {
-    background: #ff6b6b;
-    transform: scale(1.1);
-  }
-
-  .rating-slider:focus {
-    outline: none;
-  }
-
-  .rating-slider:focus-visible {
-    box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.25);
-  }
-
-  .rating-slider:focus-visible::-webkit-slider-thumb {
-    box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.3);
-  }
-
-  .rating-slider:focus-visible::-moz-range-thumb {
-    box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.3);
-  }
-
-  .slider-value {
-    font-size: 12px;
-    color: #e50914;
-    font-weight: 600;
-    min-width: 30px;
-    text-align: right;
-  }
-
-  .reset-rating-btn {
-    align-self: flex-start;
-    font-size: 11px;
-    padding: 4px 10px;
-    background-color: transparent;
-    border-color: #666;
-    color: #aaa;
-    transition: all 0.2s ease;
-  }
-
-  .reset-rating-btn:hover {
-    background-color: rgba(102, 102, 102, 0.1);
-    border-color: #e50914;
-    color: #fff;
-  }
-
-  .reset-rating-btn span {
-    margin-right: 3px;
-    font-size: 12px;
+  .empty-state-overlay .reset-link:hover {
+    color: #ff6b6b;
   }
 
   /* Ghosted legend band state (zero count) */

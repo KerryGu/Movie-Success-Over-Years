@@ -49,56 +49,17 @@ function loadData() {
             myChart.updateYearRange(yearRange);
         });
 
-        // ===== Rating Range Controls (Define before using in Reset All) =====
-        const ratingMinSlider = d3.select("#rating-min");
-        const ratingMaxSlider = d3.select("#rating-max");
-        const ratingMinValue = d3.select("#rating-min-value");
-        const ratingMaxValue = d3.select("#rating-max-value");
-        const ratingRangeDisplay = d3.select("#rating-range-display");
+        // ===== Rating Split Threshold Control (in Legend) =====
+        // Wait for legend to be created, then attach event handlers
+        setTimeout(function() {
+            const thresholdSlider = d3.select("#rating-threshold-slider");
 
-        // Helper function to update rating range display and filter
-        function updateRatingRange() {
-            let minRating = +ratingMinSlider.property("value");
-            let maxRating = +ratingMaxSlider.property("value");
-
-            // Clamp: ensure min <= max
-            if (minRating > maxRating) {
-                minRating = maxRating;
-                ratingMinSlider.property("value", minRating);
-            }
-
-            // Update displayed values
-            ratingMinValue.text(minRating.toFixed(1));
-            ratingMaxValue.text(maxRating.toFixed(1));
-            ratingRangeDisplay.text(`${minRating.toFixed(1)}–${maxRating.toFixed(1)}`);
-
-            // Update ARIA attributes for accessibility
-            ratingMinSlider
-                .attr("aria-valuenow", minRating)
-                .attr("aria-valuetext", `Minimum rating ${minRating.toFixed(1)}`);
-            ratingMaxSlider
-                .attr("aria-valuenow", maxRating)
-                .attr("aria-valuetext", `Maximum rating ${maxRating.toFixed(1)}`);
-
-            // Update chart filter
-            myChart.updateRatingRange([minRating, maxRating]);
-        }
-
-        // Attach event listeners to sliders
-        ratingMinSlider.on("input", updateRatingRange);
-        ratingMaxSlider.on("input", updateRatingRange);
-
-        // Reset rating range button
-        d3.select("#reset-rating-range").on("click", function() {
-            this.blur(); // Remove focus after click
-
-            // Reset sliders to default [0, 10]
-            ratingMinSlider.property("value", 0);
-            ratingMaxSlider.property("value", 10);
-
-            // Update display and filter
-            updateRatingRange();
-        });
+            // Attach event listener to threshold slider
+            thresholdSlider.on("input", function() {
+                const threshold = +this.value;
+                myChart.updateRatingSplit(threshold);
+            });
+        }, 100);
 
         // Setup reset all filters button
         d3.select("#reset-filters").on("click", function() {
@@ -116,15 +77,7 @@ function loadData() {
             myTimeline.brushGroup.call(myTimeline.brush.move, null);
             myChart.yearRange = null;
 
-            // Reset rating range
-            ratingMinSlider.property("value", 0);
-            ratingMaxSlider.property("value", 10);
-            ratingMinValue.text("0.0");
-            ratingMaxValue.text("10.0");
-            ratingRangeDisplay.text("0.0–10.0");
-            myChart.ratingRange = [0, 10];
-
-            // Reset legend filters too
+            // Reset legend filters and threshold
             myChart.resetLegend();
 
             // Reset zoom to default view
