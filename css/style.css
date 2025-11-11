@@ -767,8 +767,6 @@
 
   /* Bidirectional Highlight States */
   .dot.is-highlighted {
-    stroke: #e50914 !important;
-    stroke-width: 2.5px !important;
     opacity: 1 !important;
     r: 7;
     filter: drop-shadow(0 0 4px #e50914);

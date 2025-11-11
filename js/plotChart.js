@@ -1319,26 +1319,58 @@ class plotChart {
                     .classed("visible", true)
                     .html(tooltipContent);
 
-                // Smart positioning to keep tooltip within viewport
+                // Smart positioning to keep tooltip within viewport and avoid timeline
                 const tooltipNode = tooltip.node();
                 const tooltipRect = tooltipNode.getBoundingClientRect();
                 const viewportWidth = window.innerWidth;
                 const viewportHeight = window.innerHeight;
 
-                let left = event.pageX + 15;
-                let top = event.pageY - 28;
+                // Get timeline position to avoid covering it
+                const timelineElement = document.getElementById('slider-chart');
+                const timelineRect = timelineElement ? timelineElement.getBoundingClientRect() : null;
+
+                // Convert cursor position to viewport coordinates (tooltip uses position: fixed)
+                const cursorX = event.clientX;
+                const cursorY = event.clientY;
+
+                let left = cursorX + 15;
+                let top;
+
+                // PRIORITY 1: Avoid timeline completely
+                // If cursor is near timeline, position tooltip above timeline instead of near cursor
+                if (timelineRect) {
+                    // Use viewport-relative coordinates (timelineRect.top is already viewport-relative)
+                    const timelineTop = timelineRect.top;
+
+                    // If cursor is within tooltip height + buffer of timeline, position above timeline
+                    if (cursorY + tooltipRect.height + 50 > timelineTop) {
+                        // Position tooltip above timeline entirely
+                        top = timelineTop - tooltipRect.height - 30;
+
+                        // If that pushes it off screen top, position at top with minimal margin
+                        if (top < 10) {
+                            top = 10;
+                        }
+                    } else {
+                        // Cursor is far enough from timeline, use normal positioning
+                        top = cursorY - 28;
+                    }
+                } else {
+                    // No timeline element, use standard positioning
+                    top = cursorY - 28;
+
+                    // Standard viewport constraints
+                    if (top < 0) {
+                        top = cursorY + 15;
+                    }
+                    if (top + tooltipRect.height > viewportHeight) {
+                        top = viewportHeight - tooltipRect.height - 15;
+                    }
+                }
 
                 // Adjust horizontal position if tooltip would go off screen
                 if (left + tooltipRect.width > viewportWidth) {
-                    left = event.pageX - tooltipRect.width - 15;
-                }
-
-                // Adjust vertical position if tooltip would go off screen
-                if (top < 0) {
-                    top = event.pageY + 15;
-                }
-                if (top + tooltipRect.height > viewportHeight) {
-                    top = viewportHeight - tooltipRect.height - 15;
+                    left = cursorX - tooltipRect.width - 15;
                 }
 
                 tooltip

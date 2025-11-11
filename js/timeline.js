@@ -89,7 +89,73 @@ class Timeline {
             .style("fill", "#cccccc")
             .text("Average Movie Revenue by Year");
 
-        // Initialize brush component
+        // ===== Bidirectional Highlight: Timeline → Scatter =====
+        // Create hairline group for year hover indicator (BEFORE brush so brush is on top)
+        vis.hairlineGroup = vis.svg.append("g")
+            .attr("class", "timeline-hairline")
+            .style("pointer-events", "none")
+            .style("opacity", 0);
+
+        vis.hairline = vis.hairlineGroup.append("line")
+            .attr("y1", 10)
+            .attr("y2", vis.height)
+            .attr("stroke", "#e50914")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "3,3");
+
+        vis.hairlineLabel = vis.hairlineGroup.append("text")
+            .attr("y", 5)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#e50914")
+            .attr("font-size", "11px")
+            .attr("font-weight", "600");
+
+        // Add hover tracking - attach to SVG to avoid blocking brush
+        // The hairline will appear but brush interactions will still work
+        vis.svg
+            .on("mousemove.highlight", function(event) {
+                // Throttle with requestAnimationFrame
+                if (vis.animationFrame) return;
+
+                vis.animationFrame = requestAnimationFrame(() => {
+                    const [mouseX] = d3.pointer(event, this);
+                    const hoveredYear = Math.round(vis.xScale.invert(mouseX));
+
+                    // Update hairline position
+                    const xPos = vis.xScale(hoveredYear);
+                    vis.hairlineGroup
+                        .attr("transform", `translate(${xPos}, 0)`)
+                        .style("opacity", 1);
+
+                    vis.hairlineLabel.text(hoveredYear);
+
+                    // Notify main chart
+                    if (vis.onYearHover && vis.hoveredYear !== hoveredYear) {
+                        vis.hoveredYear = hoveredYear;
+                        vis.onYearHover(hoveredYear);
+                    }
+
+                    vis.animationFrame = null;
+                });
+            })
+            .on("mouseleave.highlight", function() {
+                // Clear animation frame if pending
+                if (vis.animationFrame) {
+                    cancelAnimationFrame(vis.animationFrame);
+                    vis.animationFrame = null;
+                }
+
+                // Hide hairline
+                vis.hairlineGroup.style("opacity", 0);
+
+                // Clear hover state
+                vis.hoveredYear = null;
+                if (vis.onYearHover) {
+                    vis.onYearHover(null);
+                }
+            });
+
+        // Initialize brush component (AFTER hover area so brush is on top and clickable)
         vis.brush = d3.brushX()
             .extent([[0, 10], [vis.width, vis.height]])
             .on("brush end", function (event) {
@@ -119,78 +185,6 @@ class Timeline {
                 vis.onBrush(null);
             }
         });
-
-        // ===== Bidirectional Highlight: Timeline → Scatter =====
-        // Create hairline group for year hover indicator
-        vis.hairlineGroup = vis.svg.append("g")
-            .attr("class", "timeline-hairline")
-            .style("pointer-events", "none")
-            .style("opacity", 0);
-
-        vis.hairline = vis.hairlineGroup.append("line")
-            .attr("y1", 10)
-            .attr("y2", vis.height)
-            .attr("stroke", "#e50914")
-            .attr("stroke-width", 1)
-            .attr("stroke-dasharray", "3,3");
-
-        vis.hairlineLabel = vis.hairlineGroup.append("text")
-            .attr("y", 5)
-            .attr("text-anchor", "middle")
-            .attr("fill", "#e50914")
-            .attr("font-size", "11px")
-            .attr("font-weight", "600");
-
-        // Add hover tracking area (transparent rect above the timeline)
-        vis.hoverArea = vis.svg.append("rect")
-            .attr("class", "timeline-hover-area")
-            .attr("x", 0)
-            .attr("y", 0)
-            .attr("width", vis.width)
-            .attr("height", vis.height)
-            .attr("fill", "transparent")
-            .style("pointer-events", "all")
-            .on("mousemove", function(event) {
-                // Throttle with requestAnimationFrame
-                if (vis.animationFrame) return;
-
-                vis.animationFrame = requestAnimationFrame(() => {
-                    const [mouseX] = d3.pointer(event, this);
-                    const hoveredYear = Math.round(vis.xScale.invert(mouseX));
-
-                    // Update hairline position
-                    const xPos = vis.xScale(hoveredYear);
-                    vis.hairlineGroup
-                        .attr("transform", `translate(${xPos}, 0)`)
-                        .style("opacity", 1);
-
-                    vis.hairlineLabel.text(hoveredYear);
-
-                    // Notify main chart
-                    if (vis.onYearHover && vis.hoveredYear !== hoveredYear) {
-                        vis.hoveredYear = hoveredYear;
-                        vis.onYearHover(hoveredYear);
-                    }
-
-                    vis.animationFrame = null;
-                });
-            })
-            .on("mouseleave", function() {
-                // Clear animation frame if pending
-                if (vis.animationFrame) {
-                    cancelAnimationFrame(vis.animationFrame);
-                    vis.animationFrame = null;
-                }
-
-                // Hide hairline
-                vis.hairlineGroup.style("opacity", 0);
-
-                // Clear hover state
-                vis.hoveredYear = null;
-                if (vis.onYearHover) {
-                    vis.onYearHover(null);
-                }
-            });
 
         // Initial data processing
         vis.wrangleData();
@@ -222,11 +216,6 @@ class Timeline {
 
             // Update brush extent
             vis.brush.extent([[0, 0], [vis.width, vis.height]]);
-
-            // Update hover area dimensions
-            if (vis.hoverArea) {
-                vis.hoverArea.attr("width", vis.width);
-            }
 
             // Update hairline height
             if (vis.hairline) {
