@@ -13,6 +13,7 @@ class plotChart {
         // Track active dot for keyboard navigation (roving tabindex pattern)
         this.activeDotIndex = null; // Index of currently focused dot
         this.isContainerFocused = false; // Track if container has focus
+        this.isHoveringDot = false; // Track if currently hovering over any dot
 
         this.initVis();
     }
@@ -180,6 +181,7 @@ class plotChart {
             .attr("clip-path", "url(#chart-clip)");
 
         // Add mouseleave handler to clear timeline pulse when mouse exits scatter area
+        // Dot highlights are cleared by the grace timer in mouseout handler
         vis.chartArea.on("mouseleave", function() {
             if (vis.timeline) {
                 vis.timeline.highlightYearOnTimeline(null);
@@ -203,6 +205,8 @@ class plotChart {
                 // Remove active styling and reset appearance to normal
                 vis.chartArea.selectAll(".dot")
                     .classed("is-active", false)
+                    .classed("is-highlighted", false)
+                    .classed("is-dimmed", false)
                     .attr("r", 5)
                     .style("stroke", "#ffffff")
                     .style("stroke-width", "1px");
@@ -1279,8 +1283,11 @@ class plotChart {
 
         mergedCircles
             .on("mouseover", function (event, d) {
-                // Cancel grace timer ONLY when hovering a highlighted dot (same year)
-                if (vis.timeline && vis.timeline.graceTimer && d.Released_Year === vis.timeline.hoveredYear) {
+                // Mark that we're currently hovering over a dot
+                vis.isHoveringDot = true;
+
+                // ALWAYS cancel grace timer when hovering over ANY dot
+                if (vis.timeline && vis.timeline.graceTimer) {
                     clearTimeout(vis.timeline.graceTimer);
                     vis.timeline.graceTimer = null;
                 }
@@ -1291,10 +1298,12 @@ class plotChart {
                     vis.activeDotIndex = null;
                 }
 
-                // Bidirectional highlight: notify timeline of hovered year
+                // Bidirectional highlight: notify timeline of hovered year AND highlight same-year dots
                 if (vis.timeline) {
                     vis.timeline.highlightYearOnTimeline(d.Released_Year);
                 }
+                // Highlight all dots from the same year (consistent with timeline hover behavior)
+                vis.highlightYear(d.Released_Year);
 
                 // Build tooltip content with enhanced metadata
                 let tooltipContent = `
@@ -1333,7 +1342,7 @@ class plotChart {
                     .classed("visible", true)
                     .html(tooltipContent);
 
-                // Smart positioning to keep tooltip within viewport and avoid timeline
+                // Smart positioning to keep tooltip within viewport, avoid timeline AND highlighted dots
                 const tooltipNode = tooltip.node();
                 const tooltipRect = tooltipNode.getBoundingClientRect();
                 const viewportWidth = window.innerWidth;
@@ -1342,6 +1351,20 @@ class plotChart {
                 // Get timeline position to avoid covering it
                 const timelineElement = document.getElementById('slider-chart');
                 const timelineRect = timelineElement ? timelineElement.getBoundingClientRect() : null;
+
+                // Get positions of highlighted dots to avoid covering them
+                const highlightedDots = [];
+                vis.chartArea.selectAll(".dot.is-highlighted").each(function() {
+                    const rect = this.getBoundingClientRect();
+                    highlightedDots.push({
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        centerX: rect.left + rect.width / 2,
+                        centerY: rect.top + rect.height / 2
+                    });
+                });
 
                 // Convert cursor position to viewport coordinates (tooltip uses position: fixed)
                 const cursorX = event.clientX;
@@ -1387,6 +1410,61 @@ class plotChart {
                     left = cursorX - tooltipRect.width - 15;
                 }
 
+                // PRIORITY 2: Check if tooltip would overlap highlighted dots and adjust if needed
+                const buffer = 10; // Buffer space around dots
+                let adjustmentNeeded = true;
+                let attempts = 0;
+                const maxAttempts = 4; // Try different positions
+
+                while (adjustmentNeeded && attempts < maxAttempts) {
+                    adjustmentNeeded = false;
+                    const proposedTooltipRect = {
+                        left: left,
+                        right: left + tooltipRect.width,
+                        top: top,
+                        bottom: top + tooltipRect.height
+                    };
+
+                    // Check overlap with each highlighted dot
+                    for (const dot of highlightedDots) {
+                        const overlapsHorizontal = proposedTooltipRect.left < dot.right + buffer &&
+                                                   proposedTooltipRect.right > dot.left - buffer;
+                        const overlapsVertical = proposedTooltipRect.top < dot.bottom + buffer &&
+                                                 proposedTooltipRect.bottom > dot.top - buffer;
+
+                        if (overlapsHorizontal && overlapsVertical) {
+                            adjustmentNeeded = true;
+
+                            // Try different positions based on attempt number
+                            if (attempts === 0) {
+                                // Attempt 1: Move tooltip to the right
+                                left = dot.right + buffer + 5;
+                            } else if (attempts === 1) {
+                                // Attempt 2: Move tooltip to the left
+                                left = dot.left - tooltipRect.width - buffer - 5;
+                            } else if (attempts === 2) {
+                                // Attempt 3: Move tooltip above
+                                top = dot.top - tooltipRect.height - buffer - 5;
+                            } else if (attempts === 3) {
+                                // Attempt 4: Move tooltip below
+                                top = dot.bottom + buffer + 5;
+                            }
+                            break; // Check again with new position
+                        }
+                    }
+                    attempts++;
+                }
+
+                // Final viewport bounds check after adjustments
+                if (left < 10) left = 10;
+                if (left + tooltipRect.width > viewportWidth - 10) {
+                    left = viewportWidth - tooltipRect.width - 10;
+                }
+                if (top < 10) top = 10;
+                if (top + tooltipRect.height > viewportHeight - 10) {
+                    top = viewportHeight - tooltipRect.height - 10;
+                }
+
                 tooltip
                     .style("left", left + "px")
                     .style("top", top + "px");
@@ -1400,21 +1478,29 @@ class plotChart {
                     .style("stroke-width", "2px");
             })
             .on("mouseout", function (event, d) {
-                // Don't clear timeline pulse here - let it persist while moving between dots
-                // Pulse will be cleared by chartArea mouseleave handler
+                // Mark that we're no longer hovering over this specific dot
+                vis.isHoveringDot = false;
+
+                // Don't clear timeline pulse or dot highlights here - let them persist while moving between dots
+                // They will be cleared by chartArea mouseleave handler or grace timer
 
                 // Start grace timer to clear scatter highlights (not locked)
                 if (vis.timeline && !vis.timeline.isLocked && !vis.timeline.graceTimer) {
                     vis.timeline.graceTimer = setTimeout(() => {
-                        // Clear scatter highlights
-                        if (vis.timeline.onYearHover) {
-                            vis.timeline.onYearHover(null);
+                        // Only clear if we're still not hovering over any dot
+                        if (!vis.isHoveringDot) {
+                            // Clear dot highlights directly (don't use onYearHover to avoid conflicts)
+                            vis.chartArea.selectAll(".dot")
+                                .classed("is-highlighted", false)
+                                .classed("is-dimmed", false);
+                            // Hide timeline hairline
+                            if (vis.timeline.hairlineGroup) {
+                                vis.timeline.hairlineGroup.style("opacity", 0);
+                            }
+                            vis.timeline.hoveredYear = null;
                         }
-                        // Hide timeline hairline
-                        vis.timeline.hairlineGroup.style("opacity", 0);
-                        vis.timeline.hoveredYear = null;
                         vis.timeline.graceTimer = null;
-                    }, 550);
+                    }, 150); // Shorter grace period for quicker response
                 }
 
                 d3.select("#tooltip").classed("visible", false);
@@ -1927,10 +2013,12 @@ class plotChart {
             .style("stroke", "#e50914")
             .style("stroke-width", "2px");
 
-        // Trigger timeline pulse for active dot
+        // Trigger timeline pulse for active dot AND highlight same-year dots
         if (vis.timeline) {
             vis.timeline.highlightYearOnTimeline(activeDatum.Released_Year);
         }
+        // Highlight all dots from the same year (consistent with hover behavior)
+        vis.highlightYear(activeDatum.Released_Year);
 
         // Update ARIA live region to announce the active movie
         vis.announceActiveDot(activeDatum);
