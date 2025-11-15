@@ -173,8 +173,8 @@ class StoryManager {
             .on('focus', null)
             .on('blur', null);
 
-        // Disable tooltips during story mode
-        d3.select('#tooltip').classed('story-mode-hidden', true);
+        // User wants tooltips visible in story mode
+        // d3.select('#tooltip').classed('story-mode-hidden', true);
 
         // Resize visualization to make space for panel
         this.resizeVisualization(true);
@@ -301,8 +301,8 @@ class StoryManager {
                 }
             });
 
-        // Re-enable tooltips
-        d3.select('#tooltip').classed('story-mode-hidden', false);
+        // Tooltips always visible now
+        // d3.select('#tooltip').classed('story-mode-hidden', false);
 
         // Clear story annotations and click handlers
         this.plotChart.clearStoryAnnotations();

@@ -18,6 +18,10 @@ class plotChart {
         // Track story mode state
         this.isStoryModeActive = false;
 
+        // Track context-click state (Explore mode only)
+        this.contextClickActive = false;
+        this.contextClickedMovie = null;
+
         this.initVis();
     }
 
@@ -71,6 +75,11 @@ class plotChart {
             vis.svg.select("#chart-clip rect")
                 .attr("width", vis.width)
                 .attr("height", vis.height + 7);
+
+            // Update background rect dimensions
+            vis.chartArea.select(".chart-bg")
+                .attr("width", vis.width)
+                .attr("height", vis.height);
 
             // Update zoom extents
             if (vis.zoom) {
@@ -130,7 +139,7 @@ class plotChart {
         vis.svgContainer = d3.select("#main-chart")
             .attr("width", vis.width + vis.margin.left + vis.margin.right)
             .attr("height", vis.height + vis.margin.top + vis.margin.bottom)
-            .attr("tabindex", "0") // Make focusable for keyboard navigation (roving tabindex)
+            // Removed tabindex as requested - no tab navigation for main container
             .attr("role", "application") // Indicate this handles its own keyboard navigation
             .attr("aria-label", "Scatter plot of movie gross revenue. Use arrow keys to navigate between movies.");
 
@@ -183,6 +192,21 @@ class plotChart {
         vis.chartArea = vis.svg.append("g")
             .attr("clip-path", "url(#chart-clip)");
 
+        // Add invisible background rect to capture click events
+        vis.chartArea.append("rect")
+            .attr("class", "chart-bg")
+            .attr("width", vis.width)
+            .attr("height", vis.height)
+            .attr("fill", "transparent")
+            .style("pointer-events", "all");
+
+        // Create groups for context-click feature (Explore mode only)
+        vis.contextLinesGroup = vis.chartArea.append("g")
+            .attr("class", "context-lines");
+
+        vis.contextAnnotationGroup = vis.chartArea.append("g")
+            .attr("class", "context-annotation");
+
         // Add mouseleave handler to clear timeline pulse when mouse exits scatter area
         // Dot highlights are cleared by the grace timer in mouseout handler
         vis.chartArea.on("mouseleave", function() {
@@ -191,36 +215,45 @@ class plotChart {
             }
         });
 
-        // Add keyboard navigation (roving tabindex pattern)
-        vis.svgContainer.on("keydown", function(event) {
-            vis.handleKeyboardNavigation(event);
-        });
-
-        // Track focus state
-        vis.svgContainer.on("focus", function() {
-            vis.isContainerFocused = true;
-        });
-
-        // Clear active dot when container loses focus
-        vis.svgContainer.on("blur", function() {
-            vis.isContainerFocused = false;
-            if (vis.activeDotIndex !== null) {
-                // Remove active styling and reset appearance to normal
-                vis.chartArea.selectAll(".dot")
-                    .classed("is-active", false)
-                    .classed("is-highlighted", false)
-                    .classed("is-dimmed", false)
-                    .attr("r", 5)
-                    .style("stroke", "#ffffff")
-                    .style("stroke-width", "1px");
-
-                vis.activeDotIndex = null;
-                // Clear timeline pulse
-                if (vis.timeline) {
-                    vis.timeline.highlightYearOnTimeline(null);
-                }
+        // Add click handler to SVG background to dismiss context-click
+        vis.svgContainer.on("click", function(event) {
+            // Only dismiss if clicking background (not a dot or other element)
+            if (event.target === this || event.target.tagName === 'svg' ||
+                (event.target.tagName === 'rect' && d3.select(event.target).classed('chart-bg'))) {
+                vis.clearContextClick();
             }
         });
+
+        // Keyboard navigation disabled since main container shouldn't be tabbable
+        // vis.svgContainer.on("keydown", function(event) {
+        //     vis.handleKeyboardNavigation(event);
+        // });
+
+        // // Track focus state
+        // vis.svgContainer.on("focus", function() {
+        //     vis.isContainerFocused = true;
+        // });
+
+        // // Clear active dot when container loses focus
+        // vis.svgContainer.on("blur", function() {
+        //     vis.isContainerFocused = false;
+        //     if (vis.activeDotIndex !== null) {
+        //         // Remove active styling and reset appearance to normal
+        //         vis.chartArea.selectAll(".dot")
+        //             .classed("is-active", false)
+        //             .classed("is-highlighted", false)
+        //             .classed("is-dimmed", false)
+        //             .attr("r", 5)
+        //             .style("stroke", "#ffffff")
+        //             .style("stroke-width", "1px");
+
+        //         vis.activeDotIndex = null;
+        //         // Clear timeline pulse
+        //         if (vis.timeline) {
+        //             vis.timeline.highlightYearOnTimeline(null);
+        //         }
+        //     }
+        // });
 
         // Axis labels
         vis.svg.append("text")
@@ -300,7 +333,7 @@ class plotChart {
             .attr("class", "legend-item")
             .attr("transform", (d, i) => `translate(0, ${i * legendSpacing})`)
             .style("cursor", "pointer")
-            .attr("tabindex", "0") // Make keyboard accessible
+            .attr("tabindex", "-1") // Remove from tab order
             .attr("role", "button")
             .attr("aria-pressed", "true")
             .attr("aria-label", d => `Toggle ${d.label}`)
@@ -361,7 +394,7 @@ class plotChart {
             .attr("class", "reset-legend-btn")
             .attr("transform", `translate(0, ${legendSpacing * 2})`)
             .style("cursor", "pointer")
-            .attr("tabindex", "0")
+            .attr("tabindex", "-1")
             .attr("role", "button")
             .attr("aria-label", "Reset legend filters")
             .on("click", function() {
@@ -696,7 +729,7 @@ class plotChart {
 
             if (shouldShowResetView) {
                 vis.svg.select(".reset-zoom-btn")
-                    .attr("tabindex", "0") // Make tabbable when visible
+                    .attr("tabindex", "-1") // Never tabbable as requested
                     .transition()
                     .duration(300)
                     .style("opacity", 1)
@@ -738,6 +771,68 @@ class plotChart {
 
         // Update annotations with zoom
         vis.updateAnnotationsWithZoom(newXScale, newYScale);
+
+        // Update context-click elements if active
+        if (vis.contextClickActive && vis.contextClickedMovie) {
+            // Update reference lines with new scales
+            const peerStats = vis.calculatePeerAverages(vis.contextClickedMovie);
+
+            vis.contextLinesGroup.select(".context-line-horizontal")
+                .attr("y1", newYScale(peerStats.avgGross))
+                .attr("y2", newYScale(peerStats.avgGross));
+
+            vis.contextLinesGroup.select(".context-line-vertical")
+                .attr("x1", newXScale(peerStats.avgYear))
+                .attr("x2", newXScale(peerStats.avgYear));
+
+            // Update line labels
+            vis.contextLinesGroup.selectAll(".context-line-label").each(function(d, i) {
+                const label = d3.select(this);
+                if (label.classed("context-line-label") && label.text() === "Avg Gross") {
+                    // Horizontal line label
+                    label.attr("y", newYScale(peerStats.avgGross) - 2);
+                } else if (label.classed("context-line-label") && label.text() === "Avg Year") {
+                    // Vertical line label
+                    label.attr("x", newXScale(peerStats.avgYear) + 5)
+                         .attr("y", 18);
+                }
+            });
+
+            // Update label backgrounds
+            vis.contextLinesGroup.selectAll(".context-line-label-bg").each(function(d, i) {
+                const bg = d3.select(this);
+                if (i === 0) { // Horizontal line label background
+                    bg.attr("y", newYScale(peerStats.avgGross) - 15);
+                } else { // Vertical line label background
+                    bg.attr("x", newXScale(peerStats.avgYear) - 25)
+                       .attr("y", 5);
+                }
+            });
+
+            // Update context annotation position
+            const dotX = newXScale(vis.contextClickedMovie.Released_Year);
+            const dotY = newYScale(vis.contextClickedMovie.Gross);
+
+            // Recalculate annotation position (same logic as showContextClick)
+            const annotationWidth = 250;
+            const annotationHeight = 100;
+            let annotationX = dotX + 15;
+            let annotationY = dotY - 50;
+
+            // Keep annotation within chart bounds
+            if (annotationX + annotationWidth > vis.width) {
+                annotationX = dotX - annotationWidth - 15;
+            }
+            if (annotationY < 0) {
+                annotationY = dotY + 15;
+            }
+            if (annotationY + annotationHeight > vis.height) {
+                annotationY = vis.height - annotationHeight - 10;
+            }
+
+            vis.contextAnnotationGroup.select(".context-annotation-box")
+                .attr("transform", `translate(${annotationX}, ${annotationY})`);
+        }
     }
 
     // Reset zoom to original view
@@ -821,9 +916,9 @@ class plotChart {
             });
 
         // Update annotation backgrounds - match each background to its specific label
-        // Update first annotation background
-        const bg1 = vis.svg.select(".annotation-bg-1");
-        const label1 = vis.svg.select(".annotation-label");
+        // Update first annotation background (now in chartArea)
+        const bg1 = vis.chartArea.select(".annotation-bg-1");
+        const label1 = vis.chartArea.select(".annotation-label");
         if (!bg1.empty() && !label1.empty() && label1.node()) {
             const labelBBox1 = label1.node().getBBox();
             bg1.attr("x", labelBBox1.x - 3)
@@ -833,15 +928,27 @@ class plotChart {
                 .style("opacity", 0.85);
         }
 
-        // Update second annotation background
-        const bg2 = vis.svg.select(".annotation-bg-2");
-        const label2 = vis.svg.select(".annotation-label-2");
+        // Update second annotation background (now in chartArea)
+        const bg2 = vis.chartArea.select(".annotation-bg-2");
+        const label2 = vis.chartArea.select(".annotation-label-2");
         if (!bg2.empty() && !label2.empty() && label2.node()) {
             const labelBBox2 = label2.node().getBBox();
             bg2.attr("x", labelBBox2.x - 3)
                 .attr("y", labelBBox2.y - 1)
                 .attr("width", labelBBox2.width + 6)
                 .attr("height", labelBBox2.height + 2)
+                .style("opacity", 0.85);
+        }
+
+        // Update third annotation background (underrated gem - now in chartArea)
+        const bg3 = vis.chartArea.select(".annotation-bg-3");
+        const label3 = vis.chartArea.select(".annotation-label-3");
+        if (!bg3.empty() && !label3.empty() && label3.node()) {
+            const labelBBox3 = label3.node().getBBox();
+            bg3.attr("x", labelBBox3.x - 3)
+                .attr("y", labelBBox3.y - 1)
+                .attr("width", labelBBox3.width + 6)
+                .attr("height", labelBBox3.height + 2)
                 .style("opacity", 0.85);
         }
     }
@@ -1261,8 +1368,7 @@ class plotChart {
             .attr("cy", d => vis.yScale(d.Gross))
             .attr("r", 5)
             .attr("fill", d => vis.colorScale(d.IMDB_Rating))
-            .attr("stroke", "#ffffff")  // White stroke to match CSS
-            .attr("stroke-width", 1)
+            // Let CSS handle stroke styling
             .attr("opacity", 0)
             // No tabindex - using roving tabindex pattern on container
             .attr("role", "button")
@@ -1286,8 +1392,9 @@ class plotChart {
 
         mergedCircles
             .on("mouseover", function (event, d) {
-                // Skip if story mode is active
-                if (vis.isStoryModeActive) return;
+                // Don't skip tooltip even if story mode or context-click is active - user wants it always visible
+                // Only skip the timeline highlighting in story mode
+                const skipTimelineHighlight = vis.isStoryModeActive;
 
                 // Mark that we're currently hovering over a dot
                 vis.isHoveringDot = true;
@@ -1305,11 +1412,14 @@ class plotChart {
                 }
 
                 // Bidirectional highlight: notify timeline of hovered year AND highlight same-year dots
-                if (vis.timeline) {
-                    vis.timeline.highlightYearOnTimeline(d.Released_Year);
+                // Skip this during story mode to prevent interference
+                if (!skipTimelineHighlight) {
+                    if (vis.timeline) {
+                        vis.timeline.highlightYearOnTimeline(d.Released_Year);
+                    }
+                    // Highlight all dots from the same year (consistent with timeline hover behavior)
+                    vis.highlightYear(d.Released_Year);
                 }
-                // Highlight all dots from the same year (consistent with timeline hover behavior)
-                vis.highlightYear(d.Released_Year);
 
                 // Build tooltip content with enhanced metadata
                 let tooltipContent = `
@@ -1375,6 +1485,7 @@ class plotChart {
                             centerY: rect.top + rect.height / 2
                         });
                     });
+
 
                     // Also add the currently hovered dot (with larger bounds since it's enlarged)
                     const hoveredDotRect = this.getBoundingClientRect();
@@ -1531,13 +1642,11 @@ class plotChart {
                     .transition()
                     .duration(200)
                     .attr("r", 8)
-                    .attr("fill", d => vis.colorScale(d.IMDB_Rating))
-                    .style("stroke", "#e50914")
-                    .style("stroke-width", "2px");
+                    .attr("fill", d => vis.colorScale(d.IMDB_Rating));
+                    // Let CSS handle stroke styling on hover
             })
             .on("mouseout", function (event, d) {
-                // Skip if story mode is active
-                if (vis.isStoryModeActive) return;
+                // Don't skip tooltip hiding even in story mode
 
                 // Mark that we're no longer hovering over this specific dot
                 vis.isHoveringDot = false;
@@ -1545,8 +1654,8 @@ class plotChart {
                 // Don't clear timeline pulse or dot highlights here - let them persist while moving between dots
                 // They will be cleared by chartArea mouseleave handler or grace timer
 
-                // Start grace timer to clear scatter highlights (not locked)
-                if (vis.timeline && !vis.timeline.isLocked && !vis.timeline.graceTimer) {
+                // Start grace timer to clear scatter highlights (not locked) - but skip in story mode
+                if (!vis.isStoryModeActive && vis.timeline && !vis.timeline.isLocked && !vis.timeline.graceTimer) {
                     vis.timeline.graceTimer = setTimeout(() => {
                         // Only clear if we're still not hovering over any dot
                         if (!vis.isHoveringDot) {
@@ -1571,8 +1680,18 @@ class plotChart {
                     .duration(200)
                     .attr("r", 5)
                     .attr("fill", vis.colorScale(d.IMDB_Rating))
-                    .style("stroke", "#ffffff")  // Reset to white stroke to match CSS
-                    .style("stroke-width", "1px");
+                    .style("stroke", null)  // Remove inline stroke style, let CSS handle it
+                    .style("stroke-width", null);
+            })
+            .on("click", function(event, d) {
+                // Stop event propagation to prevent chartArea click handler from firing
+                event.stopPropagation();
+
+                // Only enable context-click in Explore mode (not Story mode)
+                if (vis.isStoryModeActive) return;
+
+                // Show context-click artifacts for this movie
+                vis.showContextClick(d);
             })
             // No focus/blur handlers - using roving tabindex pattern on container
             .interrupt() // Stop any ongoing transitions
@@ -1611,23 +1730,27 @@ class plotChart {
 
         // Add annotations for insights
         vis.drawAnnotations();
+
+        // Ensure context-click groups are above dots for proper layering
+        vis.contextLinesGroup.raise();
+        vis.contextAnnotationGroup.raise();
     }
 
     drawAnnotations() {
         let vis = this;
 
         // Remove old annotations (including any lingering opacity styles)
-        vis.svg.selectAll(".annotation-group").interrupt().remove();
+        vis.chartArea.selectAll(".annotation-group").interrupt().remove();
 
         // Also remove any orphaned annotation elements
-        vis.svg.selectAll(".annotation-line").remove();
-        vis.svg.selectAll(".annotation-label").remove();
-        vis.svg.selectAll(".annotation-label-2").remove();
+        vis.chartArea.selectAll(".annotation-line").remove();
+        vis.chartArea.selectAll(".annotation-label").remove();
+        vis.chartArea.selectAll(".annotation-label-2").remove();
 
         if (vis.displayData.length === 0) return;
 
-        // Create annotation group with explicit opacity
-        let annotationGroup = vis.svg.append("g")
+        // Create annotation group with explicit opacity - add to chartArea so it's behind context groups
+        let annotationGroup = vis.chartArea.append("g")
             .attr("class", "annotation-group")
             .style("opacity", 1);  // Ensure group itself is fully opaque
 
@@ -1677,8 +1800,8 @@ class plotChart {
                 labelY = y + 65;  // More space below
             }
 
-            // Start with full title
-            let fullText = `💰 ${highestGrossing.Series_Title}`;
+            // Start with label instead of movie title
+            let fullText = `💰 Highest Grossing`;
 
             // Create temporary text element to measure actual width
             let tempText = annotationGroup.append("text")
@@ -1690,28 +1813,9 @@ class plotChart {
             let actualWidth = tempText.node().getBBox().width;
             tempText.remove();
 
-            // Smart truncation and positioning based on actual width
+            // Positioning based on actual width (no truncation needed for short labels)
             let textAnchor = "middle";
             let labelX = x;
-            let titleText = highestGrossing.Series_Title;
-            let availableWidth = vis.width - 10; // Leave 5px margin on each side
-
-            // Check if we need to truncate based on position
-            if (actualWidth > availableWidth) {
-                // Text too long - truncate
-                let maxChars = Math.floor((availableWidth / actualWidth) * titleText.length) - 5;
-                titleText = titleText.substring(0, Math.max(maxChars, 15)) + "...";
-                fullText = `💰 ${titleText}`;
-
-                // Re-measure after truncation
-                tempText = annotationGroup.append("text")
-                    .style("font-weight", "bold")
-                    .style("font-size", "11px")
-                    .style("opacity", 0)
-                    .text(fullText);
-                actualWidth = tempText.node().getBBox().width;
-                tempText.remove();
-            }
 
             // Determine horizontal position and alignment
             if (x - actualWidth / 2 < 5) {
@@ -1733,7 +1837,7 @@ class plotChart {
                 .attr("y1", lineY1)
                 .attr("x2", x)
                 .attr("y2", lineY2)
-                .style("stroke", "#e50914")
+                .style("stroke", "#ffffff")  // White lines to match text
                 .style("stroke-width", 2)
                 .style("fill", "none");  // No fill for lines
 
@@ -1755,7 +1859,7 @@ class plotChart {
                 .attr("x", labelX)
                 .attr("y", labelY)
                 .style("text-anchor", textAnchor)
-                .style("fill", "#e50914")
+                .style("fill", "#ffffff")  // White text for better visibility
                 .style("font-weight", "bold")
                 .style("font-size", "11px")
                 .text(fullText);
@@ -1851,9 +1955,8 @@ class plotChart {
                     labelY = y + 65;  // More space below
                 }
 
-                // Start with full title including rating
-                let titleText = highestRated.Series_Title;
-                let fullText = `⭐ ${titleText} (${highestRated.IMDB_Rating}/10)`;
+                // Use label instead of movie title
+                let fullText = `⭐ Highest Rated`;
 
                 // Create temporary text element to measure actual width
                 let tempText = annotationGroup.append("text")
@@ -1865,29 +1968,9 @@ class plotChart {
                 let actualWidth = tempText.node().getBBox().width;
                 tempText.remove();
 
-                // Smart truncation and positioning based on actual width
+                // Positioning based on actual width (no truncation needed for short labels)
                 let textAnchor = "middle";
                 let labelX = x;
-                let availableWidth = vis.width - 10; // Leave 5px margin on each side
-
-                // Check if we need to truncate based on position
-                if (actualWidth > availableWidth) {
-                    // Text too long - truncate title part
-                    let ratingPart = ` (${highestRated.IMDB_Rating}/10)`;
-                    let availableForTitle = availableWidth - (ratingPart.length * 7); // Approximate rating width
-                    let maxChars = Math.floor(availableForTitle / 7) - 5;
-                    titleText = titleText.substring(0, Math.max(maxChars, 10)) + "...";
-                    fullText = `⭐ ${titleText}${ratingPart}`;
-
-                    // Re-measure after truncation
-                    tempText = annotationGroup.append("text")
-                        .style("font-weight", "bold")
-                        .style("font-size", "11px")
-                        .style("opacity", 0)
-                        .text(fullText);
-                    actualWidth = tempText.node().getBBox().width;
-                    tempText.remove();
-                }
 
                 // Determine horizontal position and alignment
                 if (x - actualWidth / 2 < 5) {
@@ -1909,7 +1992,7 @@ class plotChart {
                     .attr("y1", lineY1)
                     .attr("x2", x)
                     .attr("y2", lineY2)
-                    .style("stroke", "#e50914")  // Use same color as highest grossing for consistency
+                    .style("stroke", "#ffffff")  // White lines to match text  // Use same color as highest grossing for consistency
                     .style("stroke-width", 2)
                     .style("fill", "none");  // No fill for lines
 
@@ -1931,7 +2014,7 @@ class plotChart {
                     .attr("x", labelX)
                     .attr("y", labelY)
                     .style("text-anchor", textAnchor)
-                    .style("fill", "#e50914")  // Use same color as highest grossing for consistency
+                    .style("fill", "#ffffff")  // White text for better visibility
                     .style("font-weight", "bold")
                     .style("font-size", "11px")
                     .text(fullText);
@@ -1969,14 +2052,126 @@ class plotChart {
                 }
             }
         }
+
+        // Add annotation for Underrated Gem (high rating, low revenue)
+        let medianGross = d3.median(vis.displayData, d => d.Gross);
+        let hiddenGems = vis.displayData.filter(d => d.Gross < medianGross);
+
+        if (hiddenGems.length > 0) {
+            let hiddenGem = hiddenGems.reduce((max, d) =>
+                d.IMDB_Rating > max.IMDB_Rating ? d : max
+            );
+
+            // Apply current zoom transform if it exists
+            let xScale = vis.xScale;
+            let yScale = vis.yScale;
+
+            if (isZoomed) {
+                xScale = vis.currentTransform.rescaleX(vis.xScale);
+                yScale = vis.currentTransform.rescaleY(vis.yScale);
+            }
+
+            let x = xScale(hiddenGem.Released_Year);
+            let y = yScale(hiddenGem.Gross);
+
+            // Determine if annotation should go above or below
+            let spaceAbove = y;
+            let annotateAbove = spaceAbove > 100;
+
+            // Position annotation with appropriate offset
+            let lineY1, lineY2, labelY;
+            if (annotateAbove) {
+                lineY1 = y - 8;
+                lineY2 = y - 50;
+                labelY = y - 55;
+            } else {
+                lineY1 = y + 8;
+                lineY2 = y + 50;
+                labelY = y + 65;
+            }
+
+            // Use label instead of movie title
+            let fullText = `💎 Underrated Gem`;
+
+            // Position label
+            let textAnchor = "middle";
+            let labelX = x;
+
+            // Add connector line
+            const lineElement = annotationGroup.append("line")
+                .attr("class", "annotation-line annotation-line-3")
+                .datum({Released_Year: hiddenGem.Released_Year, Gross: hiddenGem.Gross, annotateAbove: annotateAbove})
+                .attr("x1", x)
+                .attr("y1", lineY1)
+                .attr("x2", x)
+                .attr("y2", lineY2)
+                .style("stroke", "#ffffff")  // White lines to match text
+                .style("stroke-width", 2)
+                .style("fill", "none");
+
+            if (isZoomed) {
+                lineElement.style("opacity", 1);
+            } else {
+                lineElement
+                    .style("opacity", 0)
+                    .transition()
+                    .duration(500)
+                    .delay(800)
+                    .style("opacity", 1);
+            }
+
+            // Add label
+            const labelElement = annotationGroup.append("text")
+                .attr("class", "annotation-label annotation-label-3")
+                .datum({Released_Year: hiddenGem.Released_Year, Gross: hiddenGem.Gross, annotateAbove: annotateAbove, textAnchor: textAnchor})
+                .attr("x", labelX)
+                .attr("y", labelY)
+                .style("text-anchor", textAnchor)
+                .style("fill", "#ffffff")  // White text for better visibility
+                .style("font-weight", "bold")
+                .style("font-size", "11px")
+                .text(fullText);
+
+            if (isZoomed) {
+                labelElement.style("opacity", 1);
+            } else {
+                labelElement
+                    .style("opacity", 0)
+                    .transition()
+                    .duration(500)
+                    .delay(800)
+                    .style("opacity", 1);
+            }
+
+            // Add background for readability
+            let labelBBox3 = annotationGroup.select(".annotation-label-3").node().getBBox();
+            const bgRect3 = annotationGroup.insert("rect", ".annotation-label-3")
+                .attr("class", "annotation-bg-3")
+                .attr("x", labelBBox3.x - 3)
+                .attr("y", labelBBox3.y - 1)
+                .attr("width", labelBBox3.width + 6)
+                .attr("height", labelBBox3.height + 2)
+                .style("fill", "#111");
+
+            if (isZoomed) {
+                bgRect3.style("opacity", 0.85);
+            } else {
+                bgRect3
+                    .style("opacity", 0)
+                    .transition()
+                    .duration(500)
+                    .delay(800)
+                    .style("opacity", 0.85);
+            }
+        }
     }
 
     // Handle keyboard navigation for roving tabindex pattern
     handleKeyboardNavigation(event) {
         let vis = this;
 
-        // Ignore keyboard input if container is not focused
-        if (!vis.isContainerFocused) return;
+        // Ignore keyboard input if container is not focused or story mode is active
+        if (!vis.isContainerFocused || vis.isStoryModeActive) return;
 
         if (vis.displayData.length === 0) return;
 
@@ -2032,7 +2227,10 @@ class plotChart {
 
             case "Enter":
             case " ": // Space
-                // "Activate" current dot - for now just keep current behavior
+                // Trigger context-click for the active dot
+                if (vis.activeDotIndex !== null && vis.displayData[vis.activeDotIndex]) {
+                    vis.showContextClick(vis.displayData[vis.activeDotIndex]);
+                }
                 handled = true;
                 break;
         }
@@ -2071,7 +2269,7 @@ class plotChart {
         activeDot
             .classed("is-active", true)
             .attr("r", 8)
-            .style("stroke", "#e50914")
+            .style("stroke", "#ffffff")  // Keep white stroke for consistency
             .style("stroke-width", "2px");
 
         // Trigger timeline pulse for active dot AND highlight same-year dots
@@ -2302,5 +2500,333 @@ class plotChart {
             vis.updateRatingSplit(snapshot.ratingThreshold);
             d3.select("#rating-threshold-slider").property("value", snapshot.ratingThreshold);
         }
+    }
+
+    /**
+     * Context-Click Feature: Show dynamic reference lines and context annotation
+     * @param {Object} movie - The clicked movie data object
+     */
+    showContextClick(movie) {
+        let vis = this;
+
+        // Clear any existing context-click artifacts first
+        vis.clearContextClick();
+
+        // Don't hide tooltip - user wants it always visible
+
+        // Store clicked movie
+        vis.contextClickedMovie = movie;
+        vis.contextClickActive = true;
+
+        // Calculate peer averages (excluding clicked movie)
+        const peerStats = vis.calculatePeerAverages(movie);
+
+        // Get current scales (accounting for zoom)
+        let xScale = vis.xScale;
+        let yScale = vis.yScale;
+        if (vis.currentTransform && (vis.currentTransform.k !== 1 || vis.currentTransform.x !== 0 || vis.currentTransform.y !== 0)) {
+            xScale = vis.currentTransform.rescaleX(vis.xScale);
+            yScale = vis.currentTransform.rescaleY(vis.yScale);
+        }
+
+        // Draw horizontal reference line (average gross) with distinct color
+        vis.contextLinesGroup.append("line")
+            .attr("class", "context-line-horizontal")
+            .attr("x1", 0)
+            .attr("x2", vis.width)
+            .attr("y1", yScale(peerStats.avgGross))
+            .attr("y2", yScale(peerStats.avgGross))
+            .attr("stroke", "#00CED1")  // Cyan/turquoise - stands out against red/blue dots
+            .attr("stroke-width", 3)  // Make thicker for better visibility
+            .attr("stroke-dasharray", "10,5")
+            .attr("opacity", 0)
+            .transition()
+            .duration(300)
+            .attr("opacity", 1);
+
+        // Add label background for better readability
+        const horizontalLabelBg = vis.contextLinesGroup.append("rect")
+            .attr("class", "context-line-label-bg")
+            .attr("x", vis.width - 75)
+            .attr("y", yScale(peerStats.avgGross) - 15)
+            .attr("width", 65)
+            .attr("height", 18)
+            .attr("fill", "rgba(0, 0, 0, 0.8)")
+            .attr("rx", 2)
+            .attr("opacity", 0)
+            .transition()
+            .duration(300)
+            .attr("opacity", 0.9);
+
+        // Add label for horizontal reference line
+        vis.contextLinesGroup.append("text")
+            .attr("class", "context-line-label")
+            .attr("x", vis.width - 42)
+            .attr("y", yScale(peerStats.avgGross) - 2)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#00CED1")  // Cyan text to match reference lines
+            .attr("font-size", "12px")
+            .attr("font-weight", "bold")
+            .text("Avg Gross")
+            .attr("opacity", 0)
+            .transition()
+            .duration(300)
+            .attr("opacity", 1);
+
+        // Draw vertical reference line (average year) with distinct color
+        vis.contextLinesGroup.append("line")
+            .attr("class", "context-line-vertical")
+            .attr("x1", xScale(peerStats.avgYear))
+            .attr("x2", xScale(peerStats.avgYear))
+            .attr("y1", 0)
+            .attr("y2", vis.height)
+            .attr("stroke", "#00CED1")  // Cyan/turquoise - stands out against red/blue dots
+            .attr("stroke-width", 3)  // Make thicker for better visibility
+            .attr("stroke-dasharray", "10,5")
+            .attr("opacity", 0)
+            .transition()
+            .duration(300)
+            .attr("opacity", 1);
+
+        // Add label background for vertical reference line
+        const verticalLabelBg = vis.contextLinesGroup.append("rect")
+            .attr("class", "context-line-label-bg")
+            .attr("x", xScale(peerStats.avgYear) - 25)
+            .attr("y", 5)
+            .attr("width", 60)
+            .attr("height", 18)
+            .attr("fill", "rgba(0, 0, 0, 0.8)")
+            .attr("rx", 2)
+            .attr("opacity", 0)
+            .transition()
+            .duration(300)
+            .attr("opacity", 0.9);
+
+        // Add label for vertical reference line
+        vis.contextLinesGroup.append("text")
+            .attr("class", "context-line-label")
+            .attr("x", xScale(peerStats.avgYear) + 5)
+            .attr("y", 18)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#00CED1")  // Cyan text to match reference lines
+            .attr("font-size", "12px")
+            .attr("font-weight", "bold")
+            .text("Avg Year")
+            .attr("opacity", 0)
+            .transition()
+            .duration(300)
+            .attr("opacity", 1);
+
+        // Determine context label based on relative performance
+        const contextInfo = vis.determineContextLabel(movie, peerStats);
+
+        // Position for annotation (next to clicked dot) - use transformed scales
+        const dotX = xScale(movie.Released_Year);
+        const dotY = yScale(movie.Gross);
+
+        // Calculate annotation position (offset to avoid overlap)
+        const annotationWidth = 280;  // Increased width for longer text
+        const annotationHeight = 105;
+        let annotationX = dotX + 15;
+        let annotationY = dotY - 50;
+
+        // Keep annotation within chart bounds
+        if (annotationX + annotationWidth > vis.width) {
+            annotationX = dotX - annotationWidth - 15;
+        }
+        if (annotationY < 0) {
+            annotationY = dotY + 15;
+        }
+        if (annotationY + annotationHeight > vis.height) {
+            annotationY = vis.height - annotationHeight - 10;
+        }
+
+        // Create annotation group with data for zoom updates
+        const annotation = vis.contextAnnotationGroup.append("g")
+            .attr("class", "context-annotation-box")
+            .attr("transform", `translate(${annotationX}, ${annotationY})`)
+            .datum({
+                Released_Year: movie.Released_Year,
+                Gross: movie.Gross,
+                originalTransform: `translate(${annotationX}, ${annotationY})`
+            })
+            .attr("opacity", 0);
+
+        // Background rectangle with opaque fill to cover dots
+        annotation.append("rect")
+            .attr("width", annotationWidth)
+            .attr("height", annotationHeight)
+            .attr("fill", "#1a1a1a")  // Opaque black background
+            .attr("stroke", contextInfo.color)
+            .attr("stroke-width", 2.5)
+            .attr("rx", 8)
+            .style("filter", "drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5))");
+
+        // Label text
+        annotation.append("text")
+            .attr("class", "context-label")
+            .attr("x", annotationWidth / 2)
+            .attr("y", 25)
+            .attr("text-anchor", "middle")
+            .attr("fill", contextInfo.color)
+            .attr("font-size", "15px")
+            .attr("font-weight", "bold")
+            .style("text-shadow", "0 1px 2px rgba(0,0,0,0.5)")
+            .text(contextInfo.label);
+
+        // Gross comparison text
+        const grossText = annotation.append("text")
+            .attr("class", "context-detail")
+            .attr("x", 15)
+            .attr("y", 50)
+            .attr("fill", "#ffffff")
+            .attr("font-size", "13px");
+
+        grossText.append("tspan").text("Gross: ");
+        grossText.append("tspan")
+            .attr("font-weight", "bold")
+            .attr("fill", "#FFD700")
+            .text(contextInfo.grossDiff);
+        grossText.append("tspan")
+            .attr("fill", "#ffffff")
+            .text(` vs. ${peerStats.context} Avg.`);
+
+        // Rating comparison text
+        const ratingText = annotation.append("text")
+            .attr("class", "context-detail")
+            .attr("x", 15)
+            .attr("y", 72)
+            .attr("fill", "#ffffff")
+            .attr("font-size", "13px");
+
+        ratingText.append("tspan").text("Rating: ");
+        ratingText.append("tspan")
+            .attr("font-weight", "bold")
+            .attr("fill", "#FFD700")
+            .text(contextInfo.ratingDiff);
+        ratingText.append("tspan")
+            .attr("fill", "#ffffff")
+            .text(` vs. ${peerStats.context} Avg.`);
+
+        // Fade in annotation
+        annotation.transition()
+            .duration(300)
+            .attr("opacity", 1);
+
+        console.log(`Context-Click: ${movie.Series_Title} - ${contextInfo.label}`);
+    }
+
+    /**
+     * Calculate peer averages (excluding clicked movie)
+     * @param {Object} clickedMovie - The clicked movie
+     * @returns {Object} Peer statistics (avgGross, avgYear, avgRating, context)
+     */
+    calculatePeerAverages(clickedMovie) {
+        let vis = this;
+
+        // Get all other visible dots (respecting current filters)
+        const peerMovies = vis.displayData.filter(d => d !== clickedMovie);
+
+        if (peerMovies.length === 0) {
+            // Fallback if no peers
+            return {
+                avgGross: clickedMovie.Gross,
+                avgYear: clickedMovie.Released_Year,
+                avgRating: clickedMovie.IMDB_Rating,
+                context: "All"
+            };
+        }
+
+        // Calculate averages
+        const avgGross = d3.mean(peerMovies, d => d.Gross);
+        const avgYear = d3.mean(peerMovies, d => d.Released_Year);
+        const avgRating = d3.mean(peerMovies, d => d.IMDB_Rating);
+
+        // Determine context string for annotation
+        let context = "";
+        if (vis.selectedGenres.size > 0 && vis.selectedGenres.size < vis.genres.length) {
+            // Genre filter active
+            context = Array.from(vis.selectedGenres).join("/");
+        } else {
+            context = "All";
+        }
+
+        if (vis.yearRange) {
+            // Timeline filter active - round years to avoid decimals
+            context += ` (${Math.round(vis.yearRange[0])}-${Math.round(vis.yearRange[1])})`;
+        }
+
+        return {
+            avgGross,
+            avgYear,
+            avgRating,
+            context
+        };
+    }
+
+    /**
+     * Determine context label based on relative performance
+     * @param {Object} movie - The clicked movie
+     * @param {Object} peerStats - Peer statistics
+     * @returns {Object} Context info (label, color, grossDiff, ratingDiff)
+     */
+    determineContextLabel(movie, peerStats) {
+        const grossDelta = movie.Gross - peerStats.avgGross;
+        const ratingDelta = movie.IMDB_Rating - peerStats.avgRating;
+
+        // Format deltas
+        const grossDiff = (grossDelta >= 0 ? "+" : "") + "$" + (grossDelta / 1000000).toFixed(1) + "M";
+        const ratingDiff = (ratingDelta >= 0 ? "+" : "") + ratingDelta.toFixed(1);
+
+        // Determine label based on simple rules
+        let label, color;
+
+        if (grossDelta > 0 && ratingDelta > 0) {
+            label = "BLOCKBUSTER OUTPERFORMER";
+            color = "#ffd700"; // Gold
+        } else if (grossDelta < 0 && ratingDelta > 0) {
+            label = "ACCLAIMED GEM";
+            color = "#87ceeb"; // Sky blue
+        } else if (grossDelta > 0 && ratingDelta < 0) {
+            label = "CRITIC-PROOF HIT";
+            color = "#ff6347"; // Tomato red
+        } else {
+            label = "BELOW AVERAGE";
+            color = "#999"; // Gray
+        }
+
+        return {
+            label,
+            color,
+            grossDiff,
+            ratingDiff
+        };
+    }
+
+    /**
+     * Clear context-click artifacts (reference lines and annotation)
+     */
+    clearContextClick() {
+        let vis = this;
+
+        if (!vis.contextClickActive) return;
+
+        // Fade out and remove reference lines
+        vis.contextLinesGroup.selectAll("*")
+            .transition()
+            .duration(200)
+            .attr("opacity", 0)
+            .remove();
+
+        // Fade out and remove annotation
+        vis.contextAnnotationGroup.selectAll("*")
+            .transition()
+            .duration(200)
+            .attr("opacity", 0)
+            .remove();
+
+        // Reset state
+        vis.contextClickActive = false;
+        vis.contextClickedMovie = null;
     }
 }

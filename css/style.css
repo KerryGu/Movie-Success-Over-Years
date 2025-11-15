@@ -4,6 +4,29 @@
     padding: 0;
     box-sizing: border-box;
   }
+
+/* ===== Focus Visibility ===== */
+/* Hide focus outline for mouse users, show only for keyboard navigation */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+*:focus-visible {
+    outline: 2px solid #0173B2;
+    outline-offset: 2px;
+}
+
+/* SVG elements need special handling */
+svg:focus:not(:focus-visible),
+.dot:focus:not(:focus-visible) {
+    outline: none;
+}
+
+svg:focus-visible,
+.dot:focus-visible {
+    outline: 2px solid #0173B2;
+    outline-offset: 2px;
+}
   
   body {
     font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -922,14 +945,16 @@
     /* fill: #e50914; */
     stroke: #ffffff;
     stroke-width: 1px;
+    stroke-opacity: 0.5;  /* Slightly higher opacity for better visibility */
     opacity: 0.8;
     cursor: pointer;
   }
 
   .dot:hover {
     /* fill: #ff6b6b; */
-    stroke: #e50914;
-    stroke-width: 2px;
+    stroke: #e50914 !important;
+    stroke-width: 2px !important;
+    stroke-opacity: 1 !important;  /* Full opacity on hover */
     opacity: 1;
   }
 
@@ -948,6 +973,9 @@
   /* Bidirectional Highlight States */
   .dot.is-highlighted {
     opacity: 1 !important;
+    stroke: #ffffff !important;  /* White stroke for highlighted dots */
+    stroke-width: 2px !important;
+    stroke-opacity: 1 !important;
     r: 7;
     filter: drop-shadow(0 0 4px #e50914);
   }
@@ -1383,5 +1411,45 @@
 
     .story-overlay {
       background: rgba(0, 0, 0, 0.2);
+    }
+  }
+
+  /* ===== Context-Click Feature (Explore Mode) ===== */
+  .context-lines line {
+    pointer-events: none;
+  }
+
+  .context-annotation {
+    pointer-events: none;
+  }
+
+  .context-annotation-box {
+    cursor: default;
+  }
+
+  .context-label {
+    letter-spacing: 0.5px;
+  }
+
+  .context-detail tspan {
+    fill: inherit;
+  }
+
+  /* Mobile: Bottom sheet for context annotation */
+  @media (max-width: 768px) {
+    .context-annotation-box {
+      /* Override position - move to bottom sheet */
+      transform: translate(0, 0) !important;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+    }
+
+    .context-annotation-box rect {
+      width: 100vw !important;
+      height: auto;
+      min-height: 150px;
     }
   }

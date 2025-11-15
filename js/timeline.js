@@ -47,7 +47,7 @@ class Timeline {
         let svgElement = d3.select("#" + vis.parentElement)
             .attr("width", vis.width + vis.margin.left + vis.margin.right)
             .attr("height", vis.height + vis.margin.top + vis.margin.bottom)
-            .attr("tabindex", "0") // Make focusable for keyboard navigation
+            // Removed tabindex to exclude from tab navigation as requested
             .attr("role", "slider") // Semantic role
             .attr("aria-label", "Timeline year selector");
 
