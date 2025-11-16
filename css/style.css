@@ -30,11 +30,15 @@ svg:focus-visible,
   
   body {
     font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
-    background-color: #000;
+    background-color: #121212;  /* Very dark gray for "cinematic" feel */
     color: #fff;
     margin: 0;
     padding: 0;
     overflow-x: hidden;
+  }
+
+  body.no-scroll {
+    overflow: hidden;
   }
 
   .container {
@@ -485,13 +489,14 @@ svg:focus-visible,
     max-height: 700px;
     overflow-y: auto;
     padding: 15px;
-    width: 175px;
+    padding-left: 8px;
+    width: 180px;
     z-index: 1050;
   }
   
   
   .dropdown-item {
-    padding: 4px 8px 4px 4px;
+    padding: 4px 8px 4px 10px;
     font-size: 12px;
     cursor: pointer;
   }
@@ -834,7 +839,7 @@ svg:focus-visible,
     display: flex;
     justify-content: center;
     gap: 5px;
-    background-color: #1a1a1a;
+    background-color: #202020;
     padding: 5px 5px;
     margin-bottom: 5px;
     border-radius: 4px;
@@ -880,7 +885,7 @@ svg:focus-visible,
 
   /* ===== Featured Movies (second viewport, below the fold) ===== */
   .featured-movies {
-    background-color: #1a1a1a;
+    background-color: #202020;
     border-radius: 8px;
     padding: 16px;
     margin: 20px 15px 15px;
@@ -1000,7 +1005,7 @@ svg:focus-visible,
 
   /* ===== Visualization Section (main chart fills first viewport) ===== */
   .visualization-section {
-    background-color: #111;
+    background-color: #181818;
     border-radius: 8px 8px 0 0;  /* Round top corners only */
     padding: 20px;
     flex: 1;
@@ -1018,7 +1023,7 @@ svg:focus-visible,
 
   /* ===== Timeline Continuation (visual continuation of visualization box) ===== */
   .visualization-continuation {
-    background-color: #111;
+    background-color: #181818;
     border-radius: 0 0 8px 8px;  /* Round bottom corners only */
     padding: 20px;
     margin: -20px 10px 0 10px;  /* Negative top margin to eliminate gap, match horizontal padding */
@@ -1027,7 +1032,7 @@ svg:focus-visible,
   .slider-section {
     padding: 10px;
     height: 150px;
-    background-color: #1a1a1a;
+    background-color: #202020;
     border-radius: 8px;
     overflow-x: visible;
     display: flex;
@@ -1199,7 +1204,7 @@ svg:focus-visible,
 
   .annotation-label {
     font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9), 0 1px 3px rgba(0, 0, 0, 0.75);
   }
 
   .annotation-line {
@@ -1418,7 +1423,7 @@ svg:focus-visible,
     background: linear-gradient(135deg, rgba(26, 26, 26, 0.98) 0%, rgba(10, 10, 10, 0.95) 100%);
     border: 1px solid rgba(229, 9, 20, 0.3);
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(229, 9, 20, 0.15),
+    box-shadow: 0 8px 20px rgba(229, 9, 20, 0.15),
                 0 2px 8px rgba(0, 0, 0, 0.5);
     margin-bottom: 25px;
   }
@@ -1489,7 +1494,7 @@ svg:focus-visible,
     font-weight: 600;
     color: #e50914;
     margin: 0 0 4px 0;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.95), 0 2px 5px rgba(0, 0, 0, 0.8);
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1545,14 +1550,6 @@ svg:focus-visible,
     font-weight: 600;
     margin: 0 4px;
     vertical-align: middle;
-  }
-
-  /* Badge positioned in top right of caption */
-  .story-badge-topright {
-    position: absolute;
-    top: 15px;
-    right: 20px;
-    margin: 0;
   }
 
   .story-navigation {
@@ -1630,36 +1627,91 @@ svg:focus-visible,
     opacity: 0 !important;
   }
 
-  /* Story Annotations - Glowing dots */
+  /* Story Annotations - Darker gold with pulsing animation */
   .dot.story-annotation-dot {
-    filter: drop-shadow(0 0 8px rgba(229, 9, 20, 0.8));
-    stroke: #e50914;
-    stroke-width: 3px;
+    stroke: #B8860B !important;  /* Darker gold (DarkGoldenrod) */
+    stroke-width: 2px !important;
+    animation: pulse-gold 1.5s ease-in-out infinite;
   }
 
-  /* Clickable Story Dots - Pulsing animation */
-  .dot.story-clickable-dot {
-    cursor: pointer !important;
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
+  @keyframes pulse-gold {
     0%, 100% {
       opacity: 1;
-      filter: drop-shadow(0 0 8px rgba(229, 9, 20, 0.8));
+      filter:
+        drop-shadow(0 0 6px rgba(184, 134, 11, 0.8))
+        drop-shadow(0 1px 3px rgba(0, 0, 0, 0.9));
     }
     50% {
-      opacity: 0.7;
-      filter: drop-shadow(0 0 12px rgba(229, 9, 20, 1));
+      opacity: 1;
+      filter:
+        drop-shadow(0 0 12px rgba(184, 134, 11, 1))
+        drop-shadow(0 2px 5px rgba(0, 0, 0, 1));
     }
   }
 
-  .dot.story-clickable-dot:hover {
-    filter: drop-shadow(0 0 12px rgba(229, 9, 20, 1)) !important;
+  /* Clickable Story Dots - Base styling */
+  .dot.story-clickable-dot {
+    cursor: pointer !important;
+    stroke-width: 4px !important;
   }
 
-  .dot.story-clickable-dot:focus-visible {
-    outline: 2px solid #e50914;
+  /* High-rated (Red) Clickable Dots - Bright red pulsing animation */
+  .dot.story-clickable-high {
+    stroke: #ff1a1a !important;  /* Brighter red stroke */
+    animation: pulse-red 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-red {
+    0%, 100% {
+      opacity: 1;
+      filter:
+        drop-shadow(0 0 8px rgba(255, 255, 255, 0.9))
+        drop-shadow(0 0 15px rgba(255, 100, 100, 1))
+        drop-shadow(0 0 20px rgba(229, 9, 20, 1));
+    }
+    50% {
+      opacity: 1;
+      filter:
+        drop-shadow(0 0 12px rgba(255, 255, 255, 1))
+        drop-shadow(0 0 25px rgba(255, 100, 100, 1))
+        drop-shadow(0 0 35px rgba(229, 9, 20, 1));
+    }
+  }
+
+  /* Removed :hover override - let animation run continuously */
+
+  /* Low-rated (Blue) Clickable Dots - Bright blue pulsing animation */
+  .dot.story-clickable-low {
+    stroke: #1a8cff !important;  /* Bright blue stroke */
+    animation: pulse-blue 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-blue {
+    0%, 100% {
+      opacity: 1;
+      filter:
+        drop-shadow(0 0 8px rgba(255, 255, 255, 0.9))
+        drop-shadow(0 0 15px rgba(100, 180, 255, 1))
+        drop-shadow(0 0 20px rgba(26, 140, 255, 1));
+    }
+    50% {
+      opacity: 1;
+      filter:
+        drop-shadow(0 0 12px rgba(255, 255, 255, 1))
+        drop-shadow(0 0 25px rgba(100, 180, 255, 1))
+        drop-shadow(0 0 35px rgba(26, 140, 255, 1));
+    }
+  }
+
+  /* Removed :hover override - let animation run continuously */
+
+  .dot.story-clickable-high:focus-visible {
+    outline: 2px solid #ff1a1a;
+    outline-offset: 4px;
+  }
+
+  .dot.story-clickable-low:focus-visible {
+    outline: 2px solid #1a8cff;
     outline-offset: 4px;
   }
 

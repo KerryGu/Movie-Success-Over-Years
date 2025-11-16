@@ -31,13 +31,13 @@ class StoryManager {
             { // Step 2: The Blockbuster Era (1975-1985)
                 caption: `The 1970s created the 'Blockbuster.' Suddenly, 'Action' and 'Sci-Fi' films could dominate. <strong>Click the pulsing dot for <em>Star Wars</em> to see what happened.</strong>`,
                 yearRange: [1975, 1985],
-                genres: ['Action', 'Sci-Fi'],
-                annotations: ["Star Wars", "Jaws"],
-                clickableMovies: ["Star Wars"],
+                genres: ['Action', 'Sci-Fi', 'Adventure', 'Thriller'],  // Widened to include Jaws (Adventure, Thriller)
+                annotations: ["Star Wars"],  // Only Star Wars gets visual highlighting
+                clickableMovies: ["Star Wars"],  // Only 1977 Star Wars is clickable
                 requireClickToAdvance: true
             },
             { // Step 3: The Great Divergence (1990-2019)
-                caption: `In the modern era (1990-2019), success split. We now have 'Critic-Proof Hits' (high gross, lower ratings) and 'Acclaimed Gems' (high ratings, low gross).<br><br><strong>Click either highlighted film to continue.</strong> <span class="story-badge">Evidence: Correlation Weak</span>`,
+                caption: `In the modern era (1990-2019), success split. We now have 'Critic-Proof Hits' (high gross, lower ratings) and 'Acclaimed Gems' (high ratings, low gross). <strong>Click either highlighted film to continue.</strong> <span class="story-badge">Evidence: Correlation Weak</span>`,
                 yearRange: [1990, 2019],
                 genres: 'All',
                 annotations: ["The Shawshank Redemption", "Star Wars: Episode VII - The Force Awakens"],
@@ -80,6 +80,14 @@ class StoryManager {
         };
 
         console.log("User state snapshot captured:", this.userState);
+    }
+
+    /**
+     * Enable the Next button (used by Matryoshka interaction)
+     */
+    enableNextButton() {
+        d3.select('#story-next-btn').property('disabled', false);
+        console.log("Next button enabled");
     }
 
     restoreState() {
@@ -370,6 +378,9 @@ class StoryManager {
             return;
         }
 
+        // Clear context-click artifacts from previous step (if any)
+        this.plotChart.clearContextClick();
+
         this.currentStep = stepIndex;
         const step = this.storySteps[stepIndex];
 
@@ -395,7 +406,7 @@ class StoryManager {
             // Last step - disable Next button like we do with Back at step 0
             d3.select('#story-next-btn').text('Next →').property('disabled', true);
         } else {
-            // Regular step
+            // Regular step - disable Next if requireClickToAdvance is true
             d3.select('#story-next-btn').text('Next →').property('disabled', step.requireClickToAdvance);
         }
 
@@ -423,19 +434,31 @@ class StoryManager {
 
         // 4. Add annotations and interactions after transitions complete
         setTimeout(() => {
-            // Add annotations
+            // Add annotations (but skip movies that are clickable - they'll get different styling)
             if (step.annotations && step.annotations.length > 0) {
+                const clickableMoviesList = step.clickableMovies || [];
                 step.annotations.forEach(movieTitle => {
-                    this.plotChart.addStoryAnnotation(movieTitle);
+                    // Only add gold annotation styling to non-clickable movies
+                    if (!clickableMoviesList.includes(movieTitle)) {
+                        this.plotChart.addStoryAnnotation(movieTitle);
+                    }
                 });
             }
 
             // Make specific dots clickable if needed
             if (step.clickableMovies) {
-                this.plotChart.makeDotsClickableForStory(step.clickableMovies, (movie) => {
+                // Pass a reference to this StoryManager for the callback
+                const storyManager = this;
+                this.plotChart.makeDotsClickableForStory(step.clickableMovies, function(movie) {
                     console.log(`User clicked: ${movie.Series_Title}`);
-                    // Advance to next step
-                    this.goToStep(this.currentStep + 1);
+
+                    // Show context-click insight for this movie
+                    storyManager.plotChart.showContextClick(movie);
+
+                    // Enable Next button
+                    storyManager.enableNextButton();
+
+                    // Do NOT auto-advance - user must click Next button
                 });
             }
         }, duration + 200);

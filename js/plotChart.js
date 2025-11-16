@@ -117,7 +117,7 @@ class plotChart {
         vis.highColor = "#d32f2f"; // Red for high ratings
         vis.lowColor = "#005AB5";    // Blue for low ratings
 
-        vis.margin = { top: 10, right: 30, bottom: 60, left: 70 };
+        vis.margin = { top: 10, right: 40, bottom: 50, left: 80 };
 
         // Store original scales for zoom reset
         vis.originalXDomain = null;
@@ -161,9 +161,6 @@ class plotChart {
             .range([0, vis.width]);
 
         vis.yScale = d3.scaleLinear();
-            // Removed .clamp(true) - it was causing dots to stick at boundaries during zoom/pan
-
-
 
         // Color scale based on dynamic rating threshold
         vis.colorScale = d3.scaleThreshold()
@@ -171,7 +168,8 @@ class plotChart {
             .range([vis.lowColor, vis.highColor]);
 
         vis.xAxis = d3.axisBottom(vis.xScale)
-            .tickFormat(d3.format("d"));
+            .tickFormat(d3.format("d"))
+            .ticks(10);  // Suggest ~10 ticks, D3 will pick nice round numbers (every 10 years)
 
         vis.yAxis = d3.axisLeft(vis.yScale)
             .tickFormat(d => `$${d / 1000000}M`)
@@ -271,7 +269,7 @@ class plotChart {
         vis.svg.append("text")
             .attr("class", "axis-label")
             .attr("x", vis.width / 2)
-            .attr("y", vis.height + 35)
+            .attr("y", vis.height + 40)
             .style("text-anchor", "middle")
             .style("font-size", "14px")
             .style("font-weight", "500")
@@ -282,7 +280,7 @@ class plotChart {
             .attr("class", "axis-label")
             .attr("transform", "rotate(-90)")
             .attr("x", -vis.height / 2)
-            .attr("y", -60)
+            .attr("y", -65)
             .style("text-anchor", "middle")
             .style("font-size", "14px")
             .style("font-weight", "500")
@@ -335,7 +333,17 @@ class plotChart {
 
         const legend = vis.svg.append("g")
             .attr("class", "legend")
-            .attr("transform", `translate(40,25)`);
+            .attr("transform", `translate(40,40)`);
+
+        // Add legend title
+        legend.append("text")
+            .attr("class", "legend-title")
+            .attr("x", -8)
+            .attr("y", -12)
+            .attr("fill", "#fff")
+            .attr("font-size", "14px")
+            .attr("font-weight", "600")
+            .text("IMDb Rating");
 
         // Create clickable legend items
         const legendItems = legend.selectAll(".legend-item")
@@ -343,7 +351,7 @@ class plotChart {
             .enter()
             .append("g")
             .attr("class", "legend-item")
-            .attr("transform", (d, i) => `translate(0, ${i * legendSpacing})`)
+            .attr("transform", (d, i) => `translate(0, ${i * legendSpacing + 8})`)
             .style("cursor", "pointer")
             .attr("tabindex", "0") // Make keyboard accessible in explore mode
             .attr("role", "button")
@@ -420,7 +428,7 @@ class plotChart {
         // Add symbol aligned with legend circles (at x=0)
         resetLegendGroup.append("text")
             .attr("x", 0)
-            .attr("y", 4)
+            .attr("y", 8)
             .text("↺")
             .style("fill", "#888")
             .style("font-size", "12px")
@@ -439,7 +447,7 @@ class plotChart {
         resetLegendGroup.append("text")
             .attr("class", "reset-label")
             .attr("x", 12)
-            .attr("y", 4)
+            .attr("y", 8)
             .text("Reset legend")
             .style("fill", "#888")
             .style("font-size", "11px")
@@ -469,29 +477,29 @@ class plotChart {
         // Threshold label
         legend.append("text")
             .attr("class", "threshold-label")
-            .attr("x", -5)
+            .attr("x", -8)
             .attr("y", thresholdY + 5)
-            .text("Rating split")
-            .style("fill", "#aaa")
-            .style("font-size", "11px")
-            .style("font-weight", "500");
+            .style("fill", "#cccccc")
+            .style("font-size", "12px")
+            .style("font-weight", "500")
+            .text("Rating split");
 
         // Live threshold display
         legend.append("text")
             .attr("id", "threshold-display")
-            .attr("x", -5)
-            .attr("y", thresholdY + 21)
+            .attr("x", -8)
+            .attr("y", thresholdY + 23)
             .text(vis.ratingSplit.toFixed(1))
             .style("fill", "#e50914")
             .style("font-size", "11px")
             .style("font-weight", "600");
 
         // Threshold slider
-        const sliderY = thresholdY + 35;
+        const sliderY = thresholdY + 38;
         const sliderFO = legend.append("foreignObject")
-            .attr("x", -5)
+            .attr("x", -8)
             .attr("y", sliderY - 18)
-            .attr("width", 150)
+            .attr("width", 160)
             .attr("height", 25)
             .style("pointer-events", "all");
 
@@ -660,7 +668,7 @@ class plotChart {
             .attr("height", legendBBox.height + padding.top + padding.bottom)
             .attr("rx", 8)
             .attr("ry", 8)
-            .style("fill", "rgba(0, 0, 0, 0.85)")
+            .style("fill", "#121212")
             .style("stroke", "rgba(255, 255, 255, 0.1)")
             .style("stroke-width", 1.5)
             .style("filter", "url(#legend-shadow)");
@@ -680,11 +688,7 @@ class plotChart {
             .style("stroke-width", 1);
     }
 
-
-
-
-
-
+    
     // Method to handle year range updates from Timeline
     updateYearRange(yearRange, duration = 0) {
         let vis = this;
@@ -830,9 +834,13 @@ class plotChart {
             const dotX = newXScale(vis.contextClickedMovie.Released_Year);
             const dotY = newYScale(vis.contextClickedMovie.Gross);
 
+            // Get annotation dimensions from stored datum
+            const annotationBox = vis.contextAnnotationGroup.select(".context-annotation-box");
+            const annotationData = annotationBox.datum();
+            const annotationWidth = annotationData ? annotationData.width : 250;
+            const annotationHeight = annotationData ? annotationData.height : 100;
+
             // Recalculate annotation position (same logic as showContextClick)
-            const annotationWidth = 250;
-            const annotationHeight = 100;
             let annotationX = dotX + 15;
             let annotationY = dotY - 50;
 
@@ -847,8 +855,7 @@ class plotChart {
                 annotationY = vis.height - annotationHeight - 10;
             }
 
-            vis.contextAnnotationGroup.select(".context-annotation-box")
-                .attr("transform", `translate(${annotationX}, ${annotationY})`);
+            annotationBox.attr("transform", `translate(${annotationX}, ${annotationY})`);
         }
     }
 
@@ -1337,8 +1344,8 @@ class plotChart {
             ]);
         } else {
             vis.xScale.domain([
-                d3.min(vis.data, d => d.Released_Year) - 2,
-                d3.max(vis.data, d => d.Released_Year) + 2
+                d3.min(vis.data, d => d.Released_Year) - 1,
+                d3.max(vis.data, d => d.Released_Year) + 1
             ]);
         }
 
@@ -1478,7 +1485,7 @@ class plotChart {
                         <div class="movie-poster">
                             <img src="${d.Poster_Link}"
                                  alt="${d.Series_Title} Poster"
-                                 onerror="this.style.display='none'"
+                                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22150%22%3E%3Crect width=%22100%22 height=%22150%22 fill=%22%23333%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2212%22 font-family=%22Arial%22%3ENo Poster%3C/text%3E%3C/svg%3E'; this.onerror=null;"
                                  class="poster-image">
                         </div>
                     </div>`;
@@ -1916,17 +1923,17 @@ class plotChart {
                 .attr("y", labelBBox.y - 1)
                 .attr("width", labelBBox.width + 6)
                 .attr("height", labelBBox.height + 2)
-                .style("fill", "#111");
+                .style("fill", "#121212");
 
             if (isZoomed) {
-                bgRect.style("opacity", 0.85);
+                bgRect.style("opacity", 0.5);
             } else {
                 bgRect
                     .style("opacity", 0)
                     .transition()
                     .duration(500)
                     .delay(400)
-                    .style("opacity", 0.85);
+                    .style("opacity", 0.5);
             }
         }
 
@@ -2071,17 +2078,17 @@ class plotChart {
                     .attr("y", labelBBox2.y - 1)
                     .attr("width", labelBBox2.width + 6)
                     .attr("height", labelBBox2.height + 2)
-                    .style("fill", "#111");
+                    .style("fill", "#121212");
 
                 if (isZoomed) {
-                    bgRect2.style("opacity", 0.85);
+                    bgRect2.style("opacity", 0.5);
                 } else {
                     bgRect2
                         .style("opacity", 0)
                         .transition()
                         .duration(500)
                         .delay(600)
-                        .style("opacity", 0.85);
+                        .style("opacity", 0.5);
                 }
             }
         }
@@ -2089,9 +2096,10 @@ class plotChart {
         // Add annotation for Underrated Gem (high rating, low revenue)
         let medianGross = d3.median(vis.displayData, d => d.Gross);
         let hiddenGems = vis.displayData.filter(d => d.Gross < medianGross);
+        let hiddenGem = null;  // Declare in outer scope so it's accessible later
 
         if (hiddenGems.length > 0) {
-            let hiddenGem = hiddenGems.reduce((max, d) =>
+            hiddenGem = hiddenGems.reduce((max, d) =>
                 d.IMDB_Rating > max.IMDB_Rating ? d : max
             );
 
@@ -2184,19 +2192,31 @@ class plotChart {
                 .attr("y", labelBBox3.y - 1)
                 .attr("width", labelBBox3.width + 6)
                 .attr("height", labelBBox3.height + 2)
-                .style("fill", "#111");
+                .style("fill", "#121212");
 
             if (isZoomed) {
-                bgRect3.style("opacity", 0.85);
+                bgRect3.style("opacity", 0.5);
             } else {
                 bgRect3
                     .style("opacity", 0)
                     .transition()
                     .duration(500)
                     .delay(800)
-                    .style("opacity", 0.85);
+                    .style("opacity", 0.5);
             }
         }
+
+        // Mark the three featured annotation dots with special styling
+        vis.chartArea.selectAll(".dot")
+            .classed("featured-annotation-dot", d => {
+                if (!highestGrossing && !highestRated && !hiddenGem) return false;
+
+                const isHighestGrossing = highestGrossing && d.Series_Title === highestGrossing.Series_Title;
+                const isHighestRated = highestRated && d.Series_Title === highestRated.Series_Title;
+                const isHiddenGem = hiddenGem && d.Series_Title === hiddenGem.Series_Title;
+
+                return isHighestGrossing || isHighestRated || isHiddenGem;
+            });
     }
 
     // Handle keyboard navigation for roving tabindex pattern
@@ -2390,13 +2410,14 @@ class plotChart {
             return;
         }
 
-        // Add glow effect to the dot
+        // Add subtle marker to the dot (for non-clickable annotations like Jaws)
+        // Clickable dots will get the pulsing animation overlay separately
         vis.chartArea.selectAll(".dot")
             .filter(d => d.Series_Title === movieTitle)
             .classed("story-annotation-dot", true)
-            .style("stroke", "#e50914")
-            .style("stroke-width", "3px")
-            .style("filter", "drop-shadow(0 0 8px rgba(229, 9, 20, 0.8))");
+            .style("stroke", "#B8860B")  // Darker gold (DarkGoldenrod)
+            .style("stroke-width", "2px");
+            // Animation (pulse-gold) is handled by CSS
     }
 
     /**
@@ -2424,8 +2445,10 @@ class plotChart {
         vis.chartArea.selectAll(".dot")
             .filter(d => movieTitles.includes(d.Series_Title))
             .classed("story-clickable-dot", true)
+            .classed("story-clickable-high", d => d.IMDB_Rating >= vis.ratingSplit)  // High-rated (red) dots
+            .classed("story-clickable-low", d => d.IMDB_Rating < vis.ratingSplit)   // Low-rated (blue) dots
             .style("cursor", "pointer")
-            .style("animation", "pulse 1.5s ease-in-out infinite")
+            // Animation is handled by CSS classes (.story-clickable-high / .story-clickable-low), not inline
             .on("click.story", function(event, d) {
                 event.stopPropagation();
                 callback(d);
@@ -2449,8 +2472,10 @@ class plotChart {
 
         vis.chartArea.selectAll(".dot")
             .classed("story-clickable-dot", false)
+            .classed("story-clickable-high", false)  // Remove high-rated glow class
+            .classed("story-clickable-low", false)   // Remove low-rated glow class
             .style("cursor", null)
-            .style("animation", null)
+            // Animation was handled by CSS classes, no inline style to clear
             .on("click.story", null)
             .on("keydown.story", null)
             .attr("tabindex", null)
@@ -2657,9 +2682,63 @@ class plotChart {
         const dotX = xScale(movie.Released_Year);
         const dotY = yScale(movie.Gross);
 
+        // Create temporary annotation group to measure text
+        const tempAnnotation = vis.contextAnnotationGroup.append("g")
+            .attr("class", "context-annotation-box-temp")
+            .attr("opacity", 0);
+
+        // Add all text elements to measure their size
+        tempAnnotation.append("text")
+            .attr("class", "context-label")
+            .attr("x", 0)
+            .attr("y", 25)
+            .attr("fill", contextInfo.color)
+            .attr("font-size", "15px")
+            .attr("font-weight", "bold")
+            .text(contextInfo.label);
+
+        const grossText = tempAnnotation.append("text")
+            .attr("class", "context-detail")
+            .attr("x", 15)
+            .attr("y", 50)
+            .attr("fill", "#ffffff")
+            .attr("font-size", "13px");
+
+        grossText.append("tspan").text("Gross: ");
+        grossText.append("tspan")
+            .attr("font-weight", "bold")
+            .attr("fill", "#FFD700")
+            .text(contextInfo.grossDiff);
+        grossText.append("tspan")
+            .attr("fill", "#ffffff")
+            .text(` vs. ${peerStats.context} Avg.`);
+
+        const ratingText = tempAnnotation.append("text")
+            .attr("class", "context-detail")
+            .attr("x", 15)
+            .attr("y", 72)
+            .attr("fill", "#ffffff")
+            .attr("font-size", "13px");
+
+        ratingText.append("tspan").text("Rating: ");
+        ratingText.append("tspan")
+            .attr("font-weight", "bold")
+            .attr("fill", "#FFD700")
+            .text(contextInfo.ratingDiff);
+        ratingText.append("tspan")
+            .attr("fill", "#ffffff")
+            .text(` vs. ${peerStats.context} Avg.`);
+
+        // Measure the bounding box of all text elements
+        const tempBBox = tempAnnotation.node().getBBox();
+        tempAnnotation.remove(); // Remove temp group
+
+        // Calculate annotation dimensions with padding
+        const padding = 20;
+        const annotationWidth = Math.max(tempBBox.width + padding * 2, 200); // Min width 200px
+        const annotationHeight = tempBBox.height + padding * 2;
+
         // Calculate annotation position (offset to avoid overlap)
-        const annotationWidth = 280;  // Increased width for longer text
-        const annotationHeight = 105;
         let annotationX = dotX + 15;
         let annotationY = dotY - 50;
 
@@ -2681,7 +2760,9 @@ class plotChart {
             .datum({
                 Released_Year: movie.Released_Year,
                 Gross: movie.Gross,
-                originalTransform: `translate(${annotationX}, ${annotationY})`
+                originalTransform: `translate(${annotationX}, ${annotationY})`,
+                width: annotationWidth,
+                height: annotationHeight
             })
             .attr("opacity", 0);
 
@@ -2695,7 +2776,7 @@ class plotChart {
             .attr("rx", 8)
             .style("filter", "drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5))");
 
-        // Label text
+        // Label text (centered)
         annotation.append("text")
             .attr("class", "context-label")
             .attr("x", annotationWidth / 2)
@@ -2708,36 +2789,36 @@ class plotChart {
             .text(contextInfo.label);
 
         // Gross comparison text
-        const grossText = annotation.append("text")
+        const grossTextFinal = annotation.append("text")
             .attr("class", "context-detail")
             .attr("x", 15)
             .attr("y", 50)
             .attr("fill", "#ffffff")
             .attr("font-size", "13px");
 
-        grossText.append("tspan").text("Gross: ");
-        grossText.append("tspan")
+        grossTextFinal.append("tspan").text("Gross: ");
+        grossTextFinal.append("tspan")
             .attr("font-weight", "bold")
             .attr("fill", "#FFD700")
             .text(contextInfo.grossDiff);
-        grossText.append("tspan")
+        grossTextFinal.append("tspan")
             .attr("fill", "#ffffff")
             .text(` vs. ${peerStats.context} Avg.`);
 
         // Rating comparison text
-        const ratingText = annotation.append("text")
+        const ratingTextFinal = annotation.append("text")
             .attr("class", "context-detail")
             .attr("x", 15)
             .attr("y", 72)
             .attr("fill", "#ffffff")
             .attr("font-size", "13px");
 
-        ratingText.append("tspan").text("Rating: ");
-        ratingText.append("tspan")
+        ratingTextFinal.append("tspan").text("Rating: ");
+        ratingTextFinal.append("tspan")
             .attr("font-weight", "bold")
             .attr("fill", "#FFD700")
             .text(contextInfo.ratingDiff);
-        ratingText.append("tspan")
+        ratingTextFinal.append("tspan")
             .attr("fill", "#ffffff")
             .text(` vs. ${peerStats.context} Avg.`);
 

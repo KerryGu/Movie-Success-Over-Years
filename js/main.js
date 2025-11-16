@@ -15,8 +15,32 @@ function initWelcomePanel() {
     // Clear any stale sessionStorage flags from previous sessions
     sessionStorage.removeItem("startStoryOnLoad");
 
-    // Ensure overlay is visible on page load
+    // Ensure overlay is visible on page load and freeze scrolling
     welcomeOverlay.classed("hidden", false);
+    d3.select("body").classed("no-scroll", true);
+
+    // Disable tab navigation to all elements except welcome buttons
+    const disableTabNavigation = () => {
+        // Disable tab navigation for all buttons, links, and inputs except welcome buttons
+        d3.selectAll("button, a, input, select, textarea, [tabindex]")
+            .each(function() {
+                const element = d3.select(this);
+                const id = element.attr("id");
+                // Skip welcome panel buttons
+                if (id !== "explore-own-btn" && id !== "start-guided-story-btn") {
+                    element.attr("tabindex", "-1");
+                }
+            });
+    };
+
+    // Re-enable tab navigation
+    const enableTabNavigation = () => {
+        d3.selectAll("button, a, input, select, textarea")
+            .attr("tabindex", null); // Remove tabindex attribute to restore default behavior
+    };
+
+    // Disable tab navigation initially
+    disableTabNavigation();
 
     // Handle "Explore on Your Own" button
     exploreBtn.on("click", function() {
@@ -30,6 +54,10 @@ function initWelcomePanel() {
             .style("opacity", 0)
             .on("end", function() {
                 welcomeOverlay.classed("hidden", true);
+                // Re-enable scrolling
+                d3.select("body").classed("no-scroll", false);
+                // Re-enable tab navigation
+                enableTabNavigation();
             });
 
         console.log("User chose: Explore on Your Own");
@@ -44,6 +72,10 @@ function initWelcomePanel() {
             .style("opacity", 0)
             .on("end", function() {
                 welcomeOverlay.classed("hidden", true);
+                // Re-enable scrolling
+                d3.select("body").classed("no-scroll", false);
+                // Re-enable tab navigation
+                enableTabNavigation();
 
                 // Start story mode after overlay is dismissed
                 // Check if storyManager is already initialized (data loaded)
@@ -162,6 +194,9 @@ function loadData() {
 
             // Reset zoom to default view
             myChart.resetZoom();
+
+            // Clear context-click artifacts (reference lines and annotations)
+            myChart.clearContextClick();
         });
 
         // Setup reset timeline button (new)

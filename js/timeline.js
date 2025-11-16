@@ -33,7 +33,7 @@ class Timeline {
     initVis() {
         let vis = this;
 
-        vis.margin = { top: 20, right: 20, bottom: 15, left: 65 };
+        vis.margin = { top: 20, right: 35, bottom: 15, left: 65 };
 
         // Get the actual width of the container
         let container = document.getElementById(vis.parentElement);
@@ -52,7 +52,7 @@ class Timeline {
             .attr("aria-label", "Timeline year selector");
 
         vis.svg = svgElement.append("g")
-            .attr("transform", `translate(${vis.margin.left}, ${vis.margin.top})`);
+            .attr("transform", `translate(${vis.margin.left + 5}, ${vis.margin.top})`);
 
         // Scales
         vis.xScale = d3.scaleLinear()
@@ -75,9 +75,10 @@ class Timeline {
             .attr("transform", `translate(0, ${vis.height})`);
 
         vis.yAxisGroup = vis.svg.append("g")
-            .attr("class", "axis y-axis");
+            .attr("class", "axis y-axis")
 
         // Add axis labels
+        // X-axis label
         vis.svg.append("text")
             .attr("class", "axis-label")
             .attr("x", vis.width / 2)
@@ -88,7 +89,17 @@ class Timeline {
             .style("fill", "#cccccc")
             .text("Year");
 
-
+        // Y-axis label
+        vis.svg.append("text")
+            .attr("class", "axis-label")
+            .attr("transform", "rotate(-90)")
+            .attr("x", -vis.height / 2)
+            .attr("y", -vis.margin.left + 8)
+            .style("text-anchor", "middle")
+            .style("font-size", "11px")
+            .style("font-weight", "500")
+            .style("fill", "#cccccc")
+            .text("Avg Revenue");
 
         // Add title
         vis.svg.append("text")
@@ -109,8 +120,9 @@ class Timeline {
             .style("opacity", 0);
 
         vis.hairline = vis.hairlineGroup.append("line")
-            .attr("y1", 10)
-            .attr("y2", vis.height)
+            .attr("class", "dotted-line")
+            .attr("y1", vis.height)
+            .attr("y2", 10)
             .attr("stroke", "#e50914")
             .attr("stroke-width", 1)
             .attr("stroke-dasharray", "3,3");
