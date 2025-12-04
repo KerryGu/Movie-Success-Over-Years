@@ -39,6 +39,24 @@ You can view/download the dataset here:
 ## 📦 Installation & Usage
 
 ```bash
-git clone https://github.com/your-username/imdb-visualization.git
+git clone https://github.com/KerryGu/Movie-Success-Over-Years.git
 cd imdb-visualization
-open index.html
+
+## 📂 Open index.html with Live Server
+
+To properly run the visualization, you **must** open `index.html` using a local server (due to browser security restrictions with loading local files like CSV or JSON). We recommend using **Live Server** in Visual Studio Code.
+
+## Step 1: Install Live Server Extension
+
+1. Open your project in **Visual Studio Code**
+2. Go to the **Extensions Marketplace**
+3. Search for `Live Server` by **Ritwick Dey**
+4. Click **Install**
+
+## Step 2: Open with Live Server
+
+Once the extension is installed:
+- In VS Code, right-click on `index.html`
+- Select **“Open with Live Server”**
+- Your default browser will open a local address. Click on the address to go to the site.
+
